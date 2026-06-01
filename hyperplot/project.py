@@ -838,6 +838,21 @@ class HyperPlot:
                 if line_style is not None:
                     target.ls = line_style
 
+    def _plot_box_aspect(self):
+        return float(self.fig_height_cm) / float(self.fig_width_cm)
+
+    def _apply_plot_box_aspect(self, *axes):
+        aspect = self._plot_box_aspect()
+        for axis in axes:
+            if hasattr(axis, "set_box_aspect"):
+                axis.set_box_aspect(aspect)
+            else:
+                warnings.warn(
+                    "This matplotlib version does not support precise axes box aspect control.",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
+
     def _routine(self, elements):
         fig = Figure()
         ax = fig.add_subplot()
@@ -871,6 +886,9 @@ class HyperPlot:
             ax_right.set_ylabel(self.right_axis_label, color=self.right_axis_color)
             ax_right.tick_params(axis="y", colors=self.right_axis_color)
             ax_right.spines["right"].set_color(self.right_axis_color)
+            self._apply_plot_box_aspect(ax, ax_right)
+        else:
+            self._apply_plot_box_aspect(ax)
         # 设置主轴标签和其他参数
         ax.set_xlabel(self.xlabel)
         ax.set_ylabel(self.ylabel)

@@ -107,6 +107,19 @@ class HyperPlotBackendTest(unittest.TestCase):
             self.assertEqual(restored.background_alpha, 0.4)
             self.assertEqual(restored.color_palette["r"], "#111111")
 
+    def test_axes_box_aspect_follows_width_height_ratio(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            csv_path = os.path.join(tempdir, "data.csv")
+            write_csv(csv_path)
+
+            plotter = HyperPlot.HyperPlot(fig_width_cm=13, fig_height_cm=8)
+            plotter.catch(csv_path)
+            fig = plotter.get_plot([0], "")
+            fig.canvas.draw()
+
+            bbox = fig.axes[0].get_window_extent()
+            self.assertAlmostEqual(bbox.width / bbox.height, 13 / 8, places=2)
+
     def test_svg_state_roundtrip(self):
         with tempfile.TemporaryDirectory() as tempdir:
             csv_path = os.path.join(tempdir, "data.csv")
