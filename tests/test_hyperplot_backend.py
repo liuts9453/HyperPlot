@@ -1,3 +1,4 @@
+import math
 import os
 import tempfile
 import unittest
@@ -16,6 +17,32 @@ def write_csv(path, columns=("x", "a", "b"), rows=None):
         file.write(",".join(columns) + "\n")
         for row in rows:
             file.write(",".join(str(value) for value in row) + "\n")
+
+
+def visible_y_ticks(axis):
+    lower, upper = sorted(axis.get_ylim())
+    span = upper - lower
+    tolerance = span * 1e-9
+    return [
+        tick
+        for tick in axis.get_yticks()
+        if lower - tolerance <= tick <= upper + tolerance
+    ]
+
+
+def normalized_y_positions(axis, ticks):
+    lower, upper = axis.get_ylim()
+    span = upper - lower
+    return [(tick - lower) / span for tick in ticks]
+
+
+def is_nice_step(step):
+    step = abs(step)
+    if step <= 0:
+        return False
+    exponent = math.floor(math.log10(step))
+    mantissa = step / (10**exponent)
+    return any(abs(mantissa - nice) < 1e-8 for nice in (1, 2, 2.5, 5, 10))
 
 
 class HyperPlotBackendTest(unittest.TestCase):
@@ -136,6 +163,43 @@ class HyperPlotBackendTest(unittest.TestCase):
             bbox = fig.axes[0].get_window_extent()
             self.assertAlmostEqual(bbox.width / fig.dpi, 13 / 2.54, delta=0.01)
             self.assertAlmostEqual(bbox.height / fig.dpi, 8 / 2.54, delta=0.01)
+
+    def test_right_axis_uses_nice_ticks_aligned_to_left_grid(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            csv_path = os.path.join(tempdir, "data.csv")
+            write_csv(
+                csv_path,
+                columns=("x", "left", "right"),
+                rows=[
+                    (0.0, 0.0, 23.44),
+                    (1.0, 2.5, 24.11),
+                    (2.0, 5.0, 24.72),
+                    (3.0, 7.5, 25.68),
+                ],
+            )
+
+            plotter = HyperPlot.HyperPlot(fig_width_cm=13, fig_height_cm=8)
+            plotter.catch(csv_path)
+            plotter.toggle_axis([1])
+            fig = plotter.get_plot([0, 1], "Left==-b|Right==-r")
+            fig.canvas.draw()
+
+            left_axis, right_axis = fig.axes
+            left_ticks = visible_y_ticks(left_axis)
+            right_ticks = visible_y_ticks(right_axis)
+            self.assertEqual(len(left_ticks), len(right_ticks))
+
+            left_positions = normalized_y_positions(left_axis, left_ticks)
+            right_positions = normalized_y_positions(right_axis, right_ticks)
+            for left_position, right_position in zip(left_positions, right_positions):
+                self.assertAlmostEqual(left_position, right_position, places=8)
+
+            right_steps = [
+                right_ticks[index + 1] - right_ticks[index]
+                for index in range(len(right_ticks) - 1)
+            ]
+            self.assertTrue(all(abs(step - right_steps[0]) < 1e-8 for step in right_steps))
+            self.assertTrue(is_nice_step(right_steps[0]))
 
     def test_svg_state_roundtrip(self):
         with tempfile.TemporaryDirectory() as tempdir:

@@ -70,6 +70,8 @@ file.csv | x_label | curve_label | line_style | (Left Axis)
 
 `Toggle Axis` 按钮会在左轴和右轴之间切换选中的曲线。
 
+如果启用 `grid=True` 且存在右轴曲线，HyperPlot 会用左轴网格线作为几何基准，并为右轴自动选择漂亮刻度间距，例如 `1`、`0.5`、`2.5` 等。右轴 tick label 会尽量保持为 `23, 24, 25` 或 `23.5, 24.0, 24.5` 这类可读数值，同时与左轴水平网格线对齐。
+
 如果编辑的是背景组成员，`Edit Curve...` 会作用到整个背景组，因为背景组在最终图里是一个包络对象。
 
 ## Batch Style
@@ -207,7 +209,7 @@ Experimental range==b|Simulation==-r
 | `fig_width_cm` | 绘图区内框目标宽度，单位 cm；作用在坐标轴四方框以内 |
 | `fig_height_cm` | 绘图区内框目标高度，单位 cm；例如 13 和 8 表示内框物理尺寸为 13 cm x 8 cm |
 | `legend_line_length` | legend 线段长度 |
-| `label_decimal` | 右轴网格对齐时的舍入位数 |
+| `label_decimal` | 兼容旧模板保留；右轴刻度现在会自动选择漂亮数值 |
 | `marks` | marker 密度控制 |
 | `background_alpha` | 背景包络透明度 |
 | `background_points` | 背景包络插值点数 |

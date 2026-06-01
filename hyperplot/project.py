@@ -881,6 +881,147 @@ class HyperPlot:
 
         fig.canvas.draw()
 
+    @staticmethod
+    def _visible_y_ticks(axis):
+        lower, upper = sorted(axis.get_ylim())
+        span = upper - lower
+        if span <= 0:
+            return np.array([])
+        tolerance = span * 1e-9
+        ticks = np.asarray(axis.get_yticks(), dtype=float)
+        return ticks[
+            np.isfinite(ticks)
+            & (ticks >= lower - tolerance)
+            & (ticks <= upper + tolerance)
+        ]
+
+    def _axis_y_range(self, elements):
+        y_values = []
+        for element in elements:
+            _, y = self._limited_xy(element)
+            if len(y):
+                y_values.append(y)
+        if not y_values:
+            return None
+
+        values = np.concatenate(y_values)
+        values = values[np.isfinite(values)]
+        if not len(values):
+            return None
+        return float(np.nanmin(values)), float(np.nanmax(values))
+
+    @staticmethod
+    def _nice_tick_step_candidates(raw_step):
+        if not np.isfinite(raw_step) or raw_step <= 0:
+            raw_step = 1.0
+
+        exponent = math.floor(math.log10(raw_step))
+        steps = []
+        for power in range(exponent - 1, exponent + 4):
+            scale = 10**power
+            for multiplier in (1, 2, 2.5, 5, 10):
+                step = multiplier * scale
+                if step >= raw_step * (1 - 1e-12):
+                    steps.append(step)
+        return sorted(set(steps))
+
+    @staticmethod
+    def _round_tick_value(value, step):
+        if not np.isfinite(value):
+            return value
+        if step <= 0:
+            return value
+        decimals = max(0, int(math.ceil(-math.log10(abs(step)))) + 3)
+        value = round(float(value), decimals)
+        return 0.0 if value == -0.0 else value
+
+    def _right_axis_nice_ticks(self, data_min, data_max, count, lower_margin, upper_margin):
+        if count < 2:
+            return None
+
+        if data_min > data_max:
+            data_min, data_max = data_max, data_min
+        data_span = data_max - data_min
+        raw_step = data_span / max(count - 1, 1) if data_span > 0 else 1.0
+
+        for step in self._nice_tick_step_candidates(raw_step):
+            lower_first = data_max - (count - 1 + upper_margin) * step
+            upper_first = data_min + lower_margin * step
+            if lower_first > upper_first + abs(step) * 1e-9:
+                continue
+
+            data_center = (data_min + data_max) / 2
+            center_offset = (count - 1 + upper_margin - lower_margin) * step / 2
+            ideal_first = data_center - center_offset
+            first = round(ideal_first / step) * step
+            first = max(first, math.ceil((lower_first / step) - 1e-12) * step)
+            first = min(first, math.floor((upper_first / step) + 1e-12) * step)
+
+            ticks = np.array(
+                [
+                    self._round_tick_value(first + index * step, step)
+                    for index in range(count)
+                ],
+                dtype=float,
+            )
+            lower = self._round_tick_value(first - lower_margin * step, step)
+            upper = self._round_tick_value(
+                first + (count - 1 + upper_margin) * step,
+                step,
+            )
+            if lower <= data_min + abs(step) * 1e-9 and upper >= data_max - abs(step) * 1e-9:
+                return ticks, lower, upper
+        return None
+
+    def _align_right_axis_ticks(self, fig, ax, ax_right, right_axis_elements):
+        fig.canvas.draw()
+        left_ticks = self._visible_y_ticks(ax)
+        if len(left_ticks) < 2:
+            return
+
+        left_ylim = ax.get_ylim()
+        left_span = left_ylim[1] - left_ylim[0]
+        if left_span == 0:
+            return
+
+        relative_positions = (left_ticks - left_ylim[0]) / left_span
+        relative_steps = np.diff(relative_positions)
+        relative_steps = relative_steps[np.isfinite(relative_steps) & (relative_steps > 0)]
+        if not len(relative_steps):
+            return
+
+        relative_step = float(np.median(relative_steps))
+        lower_margin = float(relative_positions[0] / relative_step)
+        upper_margin = float((1 - relative_positions[-1]) / relative_step)
+
+        y_range = self._axis_y_range(right_axis_elements)
+        if y_range is None or y_range[0] == y_range[1]:
+            y_range = tuple(sorted(ax_right.get_ylim()))
+
+        nice_ticks = self._right_axis_nice_ticks(
+            y_range[0],
+            y_range[1],
+            len(left_ticks),
+            lower_margin,
+            upper_margin,
+        )
+        if nice_ticks is None:
+            return
+
+        ticks, _, _ = nice_ticks
+        relative_span = relative_positions[-1] - relative_positions[0]
+        if relative_span <= 0:
+            return
+
+        right_span = (ticks[-1] - ticks[0]) / relative_span
+        lower = ticks[0] - relative_positions[0] * right_span
+        upper = lower + right_span
+
+        ax.set_yticks(left_ticks)
+        ax.set_ylim(left_ylim)
+        ax_right.set_ylim(lower, upper)
+        ax_right.set_yticks(ticks)
+
     def _routine(self, elements):
         fig = Figure()
         ax = fig.add_subplot()
@@ -941,63 +1082,11 @@ class HyperPlot:
                 ax.spines["bottom"].get_linewidth()
             )  # 使用合并后的标签和句柄创建图例
 
-        # lticks =np.linspace(ax.get_yticks()[0], ax.get_yticks()[-1], max(len(ax_right.get_yticks()),len(ax.get_yticks())))[1:-1]
-        # lrange = ax.get_ybound()[1]-ax.get_ybound()[0]
-        # rrange = ax_right.get_ybound()[1]-ax_right.get_ybound()[0]
-        # rticks =  np.linspace(ax_right.get_ybound()[0],(lticks[-1]-lticks[0])/(lrange)*rrange+ax_right.get_ybound()[0],len(lticks))
-        # rticks = rticks+(lticks[0]-ax.get_ybound()[0])/(lticks[1]-lticks[0])*(rticks[1]-rticks[0])
-        round_up = lambda x, n: math.ceil(x * 10**n) / 10**n
+        self._fit_figure_to_plot_box(fig, ax)
+
         if parse_bool(self.grid):
             if right_axis_elements:
-                inter1 = ax.get_yticks()[1] - ax.get_yticks()[0]
-                inter2 = ax_right.get_yticks()[1] - ax_right.get_yticks()[0]
-                ax_rightyticks = ax_right.get_yticks()
-                if len(ax_right.get_yticks()) > len(ax.get_yticks()):
-                    # 增加间隔
-                    ax_rightyticks = [
-                        ax_right.get_yticks()[1]
-                        + (i - 1) * round_up(inter2 * 1.5, int(self.label_decimal))
-                        for i in range(len(ax.get_yticks()))
-                    ]
-                elif len(ax_right.get_yticks()) < len(ax.get_yticks()):
-                    # 减小间隔
-                    ax_rightyticks = [
-                        ax_right.get_yticks()[1] + (i - 1) * inter2
-                        for i in range(len(ax.get_yticks()))
-                    ]
-
-                inter2 = ax_rightyticks[1] - ax_rightyticks[0]
-                # print(inter1)
-                # print(inter2)
-                # print(ax.get_yticks()[1])
-                # print(ax.get_yticks()[-2])
-                # print(ax_right.get_yticks()[1])
-                # print(ax_right.get_yticks()[-2])
-                upperratio = max(
-                    abs(ax.get_yticks()[-2] - ax.get_ybound()[1]) / inter1,
-                    abs(ax_rightyticks[-2] - ax_right.get_ybound()[1]) / inter2,
-                )
-                lowerratio = max(
-                    abs(ax.get_yticks()[1] - ax.get_ybound()[0]) / inter1,
-                    abs(ax_rightyticks[1] - ax_right.get_ybound()[0]) / inter2,
-                )
-                ax.set_ybound(
-                    [
-                        ax.get_yticks()[1] - inter1 * lowerratio,
-                        ax.get_yticks()[-2] + inter1 * upperratio,
-                    ]
-                )
-                ax_right.set_ybound(
-                    [
-                        ax_rightyticks[1] - inter2 * lowerratio,
-                        ax_rightyticks[-2] + inter2 * upperratio,
-                    ]
-                )
-
-                ax_right.set_yticks(ax_rightyticks[1:-1])
-
-        # ax.set_yticks(lticks)
-        # ax_right.set_yticks(rticks)
+                self._align_right_axis_ticks(fig, ax, ax_right, right_axis_elements)
             ax.grid(True)
 
         # Determine which plot has finer grid. Set pointers accordingly
