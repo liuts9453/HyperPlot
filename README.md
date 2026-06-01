@@ -225,6 +225,8 @@ Experimental range==b|Simulation==-r
 2. 选择 `Edit Property`。
 3. 输入新值。
 
+默认绘图字体使用 Palatino-compatible serif 栈：优先 `Palatino` / `Palatino Linotype`，然后回退到 `TeX Gyre Pagella`、`URW Palladio L`、`P052` 和 `DejaVu Serif`。
+
 插入属性：
 
 1. 右键父节点，例如 `axis_labels` 或 `color_palette`。

@@ -116,8 +116,15 @@ SERIALIZABLE_PREFERENCES = list(USER_PREFERENCES)
 PLOT_RC_PARAMS = {
     "axes.formatter.use_mathtext": True,
     "font.family": "serif",
-    "font.serif": "cmr10",
-    "mathtext.fontset": "cm",
+    "font.serif": [
+        "Palatino",
+        "Palatino Linotype",
+        "TeX Gyre Pagella",
+        "URW Palladio L",
+        "P052",
+        "DejaVu Serif",
+    ],
+    "mathtext.fontset": "custom",
     "mathtext.rm": "serif",
     "mathtext.it": "serif:italic",
     "mathtext.bf": "serif:bold",
