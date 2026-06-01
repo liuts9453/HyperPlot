@@ -107,7 +107,7 @@ class HyperPlotBackendTest(unittest.TestCase):
             self.assertEqual(restored.background_alpha, 0.4)
             self.assertEqual(restored.color_palette["r"], "#111111")
 
-    def test_axes_box_aspect_follows_width_height_ratio(self):
+    def test_axes_box_has_requested_physical_size(self):
         with tempfile.TemporaryDirectory() as tempdir:
             csv_path = os.path.join(tempdir, "data.csv")
             write_csv(csv_path)
@@ -119,6 +119,23 @@ class HyperPlotBackendTest(unittest.TestCase):
 
             bbox = fig.axes[0].get_window_extent()
             self.assertAlmostEqual(bbox.width / bbox.height, 13 / 8, places=2)
+            self.assertAlmostEqual(bbox.width / fig.dpi, 13 / 2.54, delta=0.01)
+            self.assertAlmostEqual(bbox.height / fig.dpi, 8 / 2.54, delta=0.01)
+
+    def test_twin_axes_box_has_requested_physical_size(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            csv_path = os.path.join(tempdir, "data.csv")
+            write_csv(csv_path)
+
+            plotter = HyperPlot.HyperPlot(fig_width_cm=13, fig_height_cm=8)
+            plotter.catch(csv_path)
+            plotter.toggle_axis([1])
+            fig = plotter.get_plot([0, 1], "Left==-b|Right==-r")
+            fig.canvas.draw()
+
+            bbox = fig.axes[0].get_window_extent()
+            self.assertAlmostEqual(bbox.width / fig.dpi, 13 / 2.54, delta=0.01)
+            self.assertAlmostEqual(bbox.height / fig.dpi, 8 / 2.54, delta=0.01)
 
     def test_svg_state_roundtrip(self):
         with tempfile.TemporaryDirectory() as tempdir:

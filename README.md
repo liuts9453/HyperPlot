@@ -204,8 +204,8 @@ Experimental range==b|Simulation==-r
 | `right_axis_color` | 右轴颜色 |
 | `loc` | legend 位置，例如 `best`、`upper right` |
 | `plot_dpi` | 导出分辨率 |
-| `fig_width_cm` | 绘图区内框目标宽度，单位 cm；宽高比作用在四方框以内 |
-| `fig_height_cm` | 绘图区内框目标高度，单位 cm；例如 13:8 控制的是坐标轴四方框比例 |
+| `fig_width_cm` | 绘图区内框目标宽度，单位 cm；作用在坐标轴四方框以内 |
+| `fig_height_cm` | 绘图区内框目标高度，单位 cm；例如 13 和 8 表示内框物理尺寸为 13 cm x 8 cm |
 | `legend_line_length` | legend 线段长度 |
 | `label_decimal` | 右轴网格对齐时的舍入位数 |
 | `marks` | marker 密度控制 |

@@ -841,6 +841,9 @@ class HyperPlot:
     def _plot_box_aspect(self):
         return float(self.fig_height_cm) / float(self.fig_width_cm)
 
+    def _target_plot_box_inches(self):
+        return float(self.fig_width_cm) / 2.54, float(self.fig_height_cm) / 2.54
+
     def _apply_plot_box_aspect(self, *axes):
         aspect = self._plot_box_aspect()
         for axis in axes:
@@ -852,6 +855,31 @@ class HyperPlot:
                     RuntimeWarning,
                     stacklevel=2,
                 )
+
+    def _fit_figure_to_plot_box(self, fig, ax, max_iterations=8, tolerance=0.001):
+        target_width, target_height = self._target_plot_box_inches()
+
+        for _ in range(max_iterations):
+            fig.canvas.draw()
+            bbox = ax.get_window_extent()
+            current_width = bbox.width / fig.dpi
+            current_height = bbox.height / fig.dpi
+            if current_width <= 0 or current_height <= 0:
+                return
+
+            delta_width = target_width - current_width
+            delta_height = target_height - current_height
+            if abs(delta_width) <= tolerance and abs(delta_height) <= tolerance:
+                break
+
+            fig_width, fig_height = fig.get_size_inches()
+            fig.set_size_inches(
+                max(fig_width + delta_width, target_width),
+                max(fig_height + delta_height, target_height),
+                forward=True,
+            )
+
+        fig.canvas.draw()
 
     def _routine(self, elements):
         fig = Figure()
@@ -974,6 +1002,7 @@ class HyperPlot:
 
         # Determine which plot has finer grid. Set pointers accordingly
 
+        self._fit_figure_to_plot_box(fig, ax)
         return fig, ax
         # plt.tight_layout()
 
