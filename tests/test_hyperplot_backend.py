@@ -1,0 +1,149 @@
+import os
+import tempfile
+import unittest
+
+import HyperPlot
+
+
+def write_csv(path, columns=("x", "a", "b"), rows=None):
+    if rows is None:
+        rows = [
+            (0.0, 1.0, 2.0),
+            (1.0, 2.0, 4.0),
+            (2.0, 3.0, 6.0),
+        ]
+    with open(path, "w", encoding="utf-8") as file:
+        file.write(",".join(columns) + "\n")
+        for row in rows:
+            file.write(",".join(str(value) for value in row) + "\n")
+
+
+class HyperPlotBackendTest(unittest.TestCase):
+    def test_csv_import_creates_plot_elements(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            csv_path = os.path.join(tempdir, "data.csv")
+            write_csv(csv_path)
+
+            plotter = HyperPlot.HyperPlot()
+            plotter.catch(csv_path)
+
+            self.assertEqual(len(plotter._elements), 2)
+            self.assertEqual([element.label for element in plotter._elements], ["a", "b"])
+            self.assertEqual(plotter._elements[0].file_name, "data.csv")
+
+    def test_list_catch_preserves_all_new_elements_in_last_catch(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            first = os.path.join(tempdir, "first.csv")
+            second = os.path.join(tempdir, "second.csv")
+            write_csv(first)
+            write_csv(second)
+
+            plotter = HyperPlot.HyperPlot()
+            plotter.catch([first, second])
+
+            self.assertEqual(len(plotter._elements), 4)
+            self.assertEqual(len(plotter._last_catch), 4)
+            self.assertEqual(
+                [element.file_name for element in plotter._last_catch],
+                ["first.csv", "first.csv", "second.csv", "second.csv"],
+            )
+
+    def test_batch_style_updates_labels_and_line_styles(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            csv_path = os.path.join(tempdir, "data.csv")
+            write_csv(csv_path)
+
+            plotter = HyperPlot.HyperPlot()
+            plotter.catch(csv_path)
+            plotter._apply_styles(plotter._elements, "Experiment==-ro|Simulation==--b")
+
+            self.assertEqual(plotter._elements[0].label, "Experiment")
+            self.assertEqual(plotter._elements[0].ls, "-ro")
+            self.assertEqual(plotter._elements[1].label, "Simulation")
+            self.assertEqual(plotter._elements[1].ls, "--b")
+
+    def test_background_group_consumes_one_batch_style_target(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            csv_path = os.path.join(tempdir, "data.csv")
+            write_csv(
+                csv_path,
+                columns=("x", "low", "high", "curve"),
+                rows=[
+                    (0.0, 1.0, 2.0, 1.5),
+                    (1.0, 2.0, 3.0, 2.5),
+                    (2.0, 3.0, 4.0, 3.5),
+                ],
+            )
+
+            plotter = HyperPlot.HyperPlot()
+            plotter.catch(csv_path)
+            plotter.set_background([0, 1])
+            plotter._apply_styles(
+                plotter._elements,
+                "Envelope==-r|Centerline==--b",
+            )
+
+            self.assertEqual(plotter._elements[0].background_label, "Envelope")
+            self.assertEqual(plotter._elements[1].background_label, "Envelope")
+            self.assertEqual(plotter._elements[0].ls, "-r")
+            self.assertEqual(plotter._elements[1].ls, "-r")
+            self.assertEqual(plotter._elements[2].label, "Centerline")
+            self.assertEqual(plotter._elements[2].ls, "--b")
+
+    def test_template_save_load_roundtrip(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            template_path = os.path.join(tempdir, "custom.hpt.json")
+            plotter = HyperPlot.HyperPlot(
+                fig_width_cm="12",
+                background_alpha="0.4",
+                color_palette={"r": "#111111"},
+            )
+            plotter.save_template(template_path)
+
+            restored = HyperPlot.HyperPlot()
+            restored.load_template(template_path)
+
+            self.assertEqual(restored.fig_width_cm, 12.0)
+            self.assertEqual(restored.background_alpha, 0.4)
+            self.assertEqual(restored.color_palette["r"], "#111111")
+
+    def test_svg_state_roundtrip(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            csv_path = os.path.join(tempdir, "data.csv")
+            write_csv(csv_path)
+
+            plotter = HyperPlot.HyperPlot(outpath=tempdir + os.sep)
+            plotter.catch(csv_path)
+            plotter.out([0], "Experiment==-r", "state.svg")
+
+            restored = HyperPlot.HyperPlot()
+            restored_count = restored.catch_svg(os.path.join(tempdir, "state.svg"))
+
+            self.assertEqual(restored_count, 1)
+            self.assertEqual(restored._elements[0].label, "Experiment")
+            self.assertEqual(restored._elements[0].ls, "-r")
+
+    def test_png_state_roundtrip_if_pillow_is_available(self):
+        try:
+            import PIL  # noqa: F401
+        except ImportError:
+            self.skipTest("Pillow is not available.")
+
+        with tempfile.TemporaryDirectory() as tempdir:
+            csv_path = os.path.join(tempdir, "data.csv")
+            write_csv(csv_path)
+
+            plotter = HyperPlot.HyperPlot(outpath=tempdir + os.sep)
+            plotter.catch(csv_path)
+            plotter.out([0], "Experiment==-r", "state.png")
+
+            restored = HyperPlot.HyperPlot()
+            restored_count = restored.catch_png(os.path.join(tempdir, "state.png"))
+
+            self.assertEqual(restored_count, 1)
+            self.assertEqual(restored._elements[0].label, "Experiment")
+            self.assertEqual(restored._elements[0].ls, "-r")
+
+
+if __name__ == "__main__":
+    unittest.main()

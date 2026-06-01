@@ -1,0 +1,14 @@
+__pycache__/
+*.py[cod]
+*$py.class
+
+.pytest_cache/
+.mypy_cache/
+.coverage
+
+.git/
+.hyperplot.git/
+*.before_refactor
+
+plots/
+templates/20*.hpt.json
