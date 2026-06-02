@@ -134,6 +134,17 @@ class HyperPlotBackendTest(unittest.TestCase):
             self.assertEqual(restored.background_alpha, 0.4)
             self.assertEqual(restored.color_palette["r"], "#111111")
 
+    def test_default_axis_labels_use_names_and_units_only(self):
+        plotter = HyperPlot.HyperPlot()
+
+        self.assertEqual(plotter.axis_labels["strain"], "Engineering Strain [-]")
+        self.assertEqual(plotter.axis_labels["Truestrain"], "True Strain [-]")
+        self.assertEqual(plotter.axis_labels["Stretch"], "Stretch [-]")
+        self.assertEqual(plotter.axis_labels["stress"], "True stress [MPa]")
+        self.assertEqual(plotter.axis_labels["heat"], "Heat Generation [mW]")
+        self.assertEqual(plotter.axis_labels["tempK"], "Temperature [K]")
+        self.assertEqual(plotter.axis_labels["tempD"], "Temperature [$^\\circ$C]")
+
     def test_axes_box_has_requested_physical_size(self):
         with tempfile.TemporaryDirectory() as tempdir:
             csv_path = os.path.join(tempdir, "data.csv")
