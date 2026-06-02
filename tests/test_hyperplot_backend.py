@@ -45,6 +45,26 @@ def is_nice_step(step):
     return any(abs(mantissa - nice) < 1e-8 for nice in (1, 2, 2.5, 5, 10))
 
 
+def assert_right_axis_ticks_are_aligned_and_nice(test_case, left_axis, right_axis):
+    left_ticks = visible_y_ticks(left_axis)
+    right_ticks = visible_y_ticks(right_axis)
+    test_case.assertEqual(len(left_ticks), len(right_ticks))
+
+    left_positions = normalized_y_positions(left_axis, left_ticks)
+    right_positions = normalized_y_positions(right_axis, right_ticks)
+    for left_position, right_position in zip(left_positions, right_positions):
+        test_case.assertAlmostEqual(left_position, right_position, places=8)
+
+    right_steps = [
+        right_ticks[index + 1] - right_ticks[index]
+        for index in range(len(right_ticks) - 1)
+    ]
+    test_case.assertTrue(
+        all(abs(step - right_steps[0]) < 1e-8 for step in right_steps)
+    )
+    test_case.assertTrue(is_nice_step(right_steps[0]))
+
+
 class HyperPlotBackendTest(unittest.TestCase):
     def test_csv_import_creates_plot_elements(self):
         with tempfile.TemporaryDirectory() as tempdir:
@@ -196,21 +216,34 @@ class HyperPlotBackendTest(unittest.TestCase):
             fig.canvas.draw()
 
             left_axis, right_axis = fig.axes
-            left_ticks = visible_y_ticks(left_axis)
-            right_ticks = visible_y_ticks(right_axis)
-            self.assertEqual(len(left_ticks), len(right_ticks))
+            assert_right_axis_ticks_are_aligned_and_nice(self, left_axis, right_axis)
 
-            left_positions = normalized_y_positions(left_axis, left_ticks)
-            right_positions = normalized_y_positions(right_axis, right_ticks)
-            for left_position, right_position in zip(left_positions, right_positions):
-                self.assertAlmostEqual(left_position, right_position, places=8)
+    def test_right_axis_alignment_does_not_depend_on_grid_visibility(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            csv_path = os.path.join(tempdir, "data.csv")
+            write_csv(
+                csv_path,
+                columns=("x", "left", "right"),
+                rows=[
+                    (0.0, 0.0, 23.44),
+                    (1.0, 2.5, 24.11),
+                    (2.0, 5.0, 24.72),
+                    (3.0, 7.5, 25.68),
+                ],
+            )
 
-            right_steps = [
-                right_ticks[index + 1] - right_ticks[index]
-                for index in range(len(right_ticks) - 1)
-            ]
-            self.assertTrue(all(abs(step - right_steps[0]) < 1e-8 for step in right_steps))
-            self.assertTrue(is_nice_step(right_steps[0]))
+            plotter = HyperPlot.HyperPlot(
+                fig_width_cm=13,
+                fig_height_cm=8,
+                grid=False,
+            )
+            plotter.catch(csv_path)
+            plotter.toggle_axis([1])
+            fig = plotter.get_plot([0, 1], "Left==-b|Right==-r")
+            fig.canvas.draw()
+
+            left_axis, right_axis = fig.axes
+            assert_right_axis_ticks_are_aligned_and_nice(self, left_axis, right_axis)
 
     def test_svg_state_roundtrip(self):
         with tempfile.TemporaryDirectory() as tempdir:

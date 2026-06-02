@@ -1084,9 +1084,10 @@ class HyperPlot:
 
         self._fit_figure_to_plot_box(fig, ax)
 
+        if right_axis_elements:
+            self._align_right_axis_ticks(fig, ax, ax_right, right_axis_elements)
+
         if parse_bool(self.grid):
-            if right_axis_elements:
-                self._align_right_axis_ticks(fig, ax, ax_right, right_axis_elements)
             ax.grid(True)
 
         # Determine which plot has finer grid. Set pointers accordingly
