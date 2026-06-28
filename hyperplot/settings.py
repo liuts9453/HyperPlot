@@ -67,9 +67,10 @@ DEFAULT_SETTINGS = {
     "outpath": "./plots/",
     "supported_formats": copy.deepcopy(SUPPORTED_FORMATS),
     "label_decimal": 0,
-    "fig_width_cm": 9,
-    "fig_height_cm": 9,
+    "fig_width_cm": 8.25,
+    "fig_height_cm": 5.5,
     "legend_line_length": 1.5,
+    "legend_frame": "True",
     "marks": 10,
     "background_alpha": 0.25,
     "background_points": 1000,
@@ -92,6 +93,7 @@ USER_PREFERENCES = {
     "fig_width_cm",
     "fig_height_cm",
     "legend_line_length",
+    "legend_frame",
     "marks",
     "background_alpha",
     "background_points",
@@ -117,22 +119,27 @@ PLOT_RC_PARAMS = {
     "axes.formatter.use_mathtext": True,
     "font.family": "serif",
     "font.serif": [
-        "Palatino",
-        "Palatino Linotype",
-        "TeX Gyre Pagella",
-        "URW Palladio L",
-        "P052",
+        "Times New Roman",
+        "Times",
+        "TeX Gyre Termes",
+        "Nimbus Roman",
+        "Liberation Serif",
+        "Tinos",
         "DejaVu Serif",
     ],
+    "font.size": 10,
     "mathtext.fontset": "custom",
     "mathtext.rm": "serif",
     "mathtext.it": "serif:italic",
     "mathtext.bf": "serif:bold",
-    "xtick.labelsize": 14,
-    "ytick.labelsize": 14,
-    "legend.fontsize": 16,
-    "axes.labelsize": 16,
+    "xtick.labelsize": 10,
+    "ytick.labelsize": 10,
+    "legend.fontsize": 10,
+    "axes.labelsize": 10,
     "figure.constrained_layout.use": True,
+    "pdf.fonttype": 42,
+    "ps.fonttype": 42,
+    "svg.fonttype": "none",
     "xtick.direction": "in",
     "ytick.direction": "in",
 }
@@ -211,7 +218,7 @@ def validate_preference(name, value):
         return parsed
     elif name == "label_decimal":
         return int(float(value))
-    elif name == "grid":
+    elif name in {"grid", "legend_frame"}:
         return parse_bool(value)
     elif name in {"xmin", "xmax"}:
         return parse_optional_float(value, name)

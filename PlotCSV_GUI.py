@@ -58,6 +58,7 @@ class PlotApp:
             "loc",
             "plot_dpi",
             "legend_line_length",
+            "legend_frame",
             "label_decimal",
             "fig_width_cm",
             "fig_height_cm",

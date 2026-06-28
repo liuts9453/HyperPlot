@@ -4,6 +4,7 @@ import tempfile
 import unittest
 
 import HyperPlot
+from hyperplot.settings import PLOT_RC_PARAMS
 
 
 def write_csv(path, columns=("x", "a", "b"), rows=None):
@@ -66,6 +67,15 @@ def assert_right_axis_ticks_are_aligned_and_nice(test_case, left_axis, right_axi
 
 
 class HyperPlotBackendTest(unittest.TestCase):
+    def test_default_plot_typography_matches_cmame_body_text(self):
+        self.assertEqual(PLOT_RC_PARAMS["font.size"], 10)
+        self.assertEqual(PLOT_RC_PARAMS["xtick.labelsize"], 10)
+        self.assertEqual(PLOT_RC_PARAMS["ytick.labelsize"], 10)
+        self.assertEqual(PLOT_RC_PARAMS["legend.fontsize"], 10)
+        self.assertEqual(PLOT_RC_PARAMS["axes.labelsize"], 10)
+        self.assertEqual(PLOT_RC_PARAMS["font.serif"][0], "Times New Roman")
+        self.assertIn("TeX Gyre Termes", PLOT_RC_PARAMS["font.serif"])
+
     def test_csv_import_creates_plot_elements(self):
         with tempfile.TemporaryDirectory() as tempdir:
             csv_path = os.path.join(tempdir, "data.csv")
@@ -164,6 +174,25 @@ class HyperPlotBackendTest(unittest.TestCase):
         self.assertEqual(plotter.axis_labels["heat"], "Heat Generation [mW]")
         self.assertEqual(plotter.axis_labels["tempK"], "Temperature [K]")
         self.assertEqual(plotter.axis_labels["tempD"], "Temperature [$^\\circ$C]")
+
+    def test_default_plot_box_size_is_cmame_column_ratio(self):
+        plotter = HyperPlot.HyperPlot()
+
+        self.assertEqual(plotter.fig_width_cm, 8.25)
+        self.assertEqual(plotter.fig_height_cm, 5.5)
+
+    def test_legend_frame_can_be_disabled(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            csv_path = os.path.join(tempdir, "data.csv")
+            write_csv(csv_path)
+
+            plotter = HyperPlot.HyperPlot(legend_frame=False)
+            plotter.catch(csv_path)
+            fig = plotter.get_plot([0, 1], "Experiment==-r|Simulation==--b")
+            legend = fig.axes[0].get_legend()
+
+            self.assertIsNotNone(legend)
+            self.assertFalse(legend.get_frame().get_visible())
 
     def test_axes_box_has_requested_physical_size(self):
         with tempfile.TemporaryDirectory() as tempdir:

@@ -1069,18 +1069,20 @@ class HyperPlot:
             lines += right_lines
             labels += right_labels
         if len(elements) > 1:
-            ax.legend(
+            legend_frame = parse_bool(self.legend_frame)
+            legend = ax.legend(
                 lines,
                 labels,
                 loc=self.loc,
                 borderaxespad=0.0,
+                frameon=legend_frame,
                 framealpha=1,
                 edgecolor="black",
                 fancybox=False,
                 handlelength=float(self.legend_line_length),
-            ).get_frame().set_linewidth(
-                ax.spines["bottom"].get_linewidth()
             )  # 使用合并后的标签和句柄创建图例
+            if legend_frame:
+                legend.get_frame().set_linewidth(ax.spines["bottom"].get_linewidth())
 
         self._fit_figure_to_plot_box(fig, ax)
 

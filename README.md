@@ -206,9 +206,10 @@ Experimental range==b|Simulation==-r
 | `right_axis_color` | 右轴颜色 |
 | `loc` | legend 位置，例如 `best`、`upper right` |
 | `plot_dpi` | 导出分辨率 |
-| `fig_width_cm` | 绘图区内框目标宽度，单位 cm；作用在坐标轴四方框以内 |
-| `fig_height_cm` | 绘图区内框目标高度，单位 cm；例如 13 和 8 表示内框物理尺寸为 13 cm x 8 cm |
+| `fig_width_cm` | 绘图区内框目标宽度，单位 cm；作用在坐标轴四方框以内，默认 `8.25` |
+| `fig_height_cm` | 绘图区内框目标高度，单位 cm；默认 `5.5` |
 | `legend_line_length` | legend 线段长度 |
+| `legend_frame` | 是否显示 legend 边框，使用 `True` 或 `False` |
 | `label_decimal` | 兼容旧模板保留；右轴刻度现在会自动选择漂亮数值 |
 | `marks` | marker 密度控制 |
 | `background_alpha` | 背景包络透明度 |
@@ -225,7 +226,7 @@ Experimental range==b|Simulation==-r
 2. 选择 `Edit Property`。
 3. 输入新值。
 
-默认绘图字体使用 Palatino-compatible serif 栈：优先 `Palatino` / `Palatino Linotype`，然后回退到 `TeX Gyre Pagella`、`URW Palladio L`、`P052` 和 `DejaVu Serif`。
+默认绘图字体对齐 CMAME/Elsevier `elsarticle` final 3p times 模板：tick labels、legend 和 axis labels 均为 `10 pt`，字体优先使用 `Times New Roman` / `Times`，然后回退到 `TeX Gyre Termes`、`Nimbus Roman`、`Liberation Serif`、`Tinos` 和 `DejaVu Serif`。
 
 插入属性：
 
@@ -302,8 +303,9 @@ templates/YYYYMMDD_HHMMSS.hpt.json
   "created_at": "2026-06-01T12:00:00",
   "preferences": {
     "plot_type": "strain_stress_tempD",
-    "fig_width_cm": 9,
-    "fig_height_cm": 9,
+    "fig_width_cm": 8.25,
+    "fig_height_cm": 5.5,
+    "legend_frame": false,
     "color_palette": {
       "r": "#e64b35",
       "g": "#00a087",
