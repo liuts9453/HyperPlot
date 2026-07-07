@@ -159,6 +159,13 @@ class PlotApp:
             command=self.invert_selection,
         )
         self.invert_selection_button.grid(row=0, column=2, sticky="e", padx=1, pady=0)
+        self.reload_button = ttk.Button(
+            self.workbench_header_frame,
+            text="Reload",
+            width=8,
+            command=self.reload_all_curves,
+        )
+        self.reload_button.grid(row=0, column=3, sticky="e", padx=1, pady=0)
 
         self.selection_list = tk.Listbox(
             self.left_frame, selectmode="multiple", exportselection=False
@@ -515,6 +522,33 @@ class PlotApp:
             if index not in selected:
                 self.selection_list.selection_set(index)
         self.log_message("Inverted Workbench selection.")
+
+    def reload_all_curves(self):
+        try:
+            self.update_plotter_property()
+            result = self.plotter.reload_all()
+        except FileNotFoundError as e:
+            self.log_message(f"Reload skipped: {str(e)}")
+            return
+        except Exception as e:
+            self.log_message(f"Reload failed: {str(e)}")
+            return
+
+        self.populate_tree()
+        self.update_palette_preview()
+        self.update_selection_list()
+        if self.selection_list.size():
+            self.selection_list.selection_set(0, tk.END)
+            self.update_plot_view(self.get_current_plot(), self.preview_frame)
+            self.notebook.select(self.preview_frame)
+
+        self.log_message(
+            f"Reloaded {result['element_count']} element(s) from {len(result['paths'])} file(s)."
+        )
+        if result["missing"]:
+            self.log_message(
+                "Reload skipped missing source file(s): " + ", ".join(result["missing"])
+            )
 
     def edit_selected_curve(self):
         selected_indices = self.selected_element_indices()

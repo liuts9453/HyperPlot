@@ -10,6 +10,7 @@ class PlotElement:
     ls: str = "-"
     axis: str = "left"
     file_name: str = ""
+    source_path: str = ""
     x_label: str = ""
     y_label: str = ""
     signature: str = ""

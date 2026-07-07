@@ -315,6 +315,7 @@ class HyperPlot:
             "background_group": getattr(element, "background_group", None),
             "background_label": getattr(element, "background_label", None),
             "file_name": getattr(element, "file_name", ""),
+            "source_path": getattr(element, "source_path", ""),
             "x_label": getattr(element, "x_label", ""),
             "y_label": getattr(element, "y_label", getattr(element, "label", "")),
             "signature": getattr(element, "signature", ""),
@@ -366,6 +367,7 @@ class HyperPlot:
             raise ValueError("SVG element state has mismatched x/y lengths.")
 
         file_name = element_state.get("file_name", "")
+        source_path = element_state.get("source_path", "")
         x_label = element_state.get("x_label", "")
         y_label = element_state.get("y_label", element_state.get("label", ""))
         signature = element_state.get("signature") or (
@@ -378,6 +380,7 @@ class HyperPlot:
             ls=element_state.get("ls", "-"),
             axis=element_state.get("axis", "left"),
             file_name=file_name,
+            source_path=source_path,
             x_label=x_label,
             y_label=y_label,
             signature=signature,
@@ -407,6 +410,7 @@ class HyperPlot:
                 "background_group",
                 "background_label",
                 "file_name",
+                "source_path",
                 "x_label",
                 "y_label",
                 "signature",
@@ -433,13 +437,98 @@ class HyperPlot:
             self._upsert_element(self._element_from_state(element_state))
         return len(self._last_catch)
 
+    @staticmethod
+    def _resolve_state_source_paths(state, base_dir):
+        for element_state in state.get("elements", []):
+            if element_state.get("source_path"):
+                continue
+            file_name = element_state.get("file_name", "")
+            if not file_name:
+                continue
+            candidate = os.path.join(base_dir, file_name)
+            if os.path.isfile(candidate):
+                element_state["source_path"] = os.path.abspath(candidate)
+        return state
+
     def catch_svg(self, file_path):
         state = self.read_svg_state(file_path)
+        self._resolve_state_source_paths(
+            state,
+            os.path.dirname(os.path.abspath(file_path)),
+        )
         return self.restore_state(state, merge=True)
 
     def catch_png(self, file_path):
         state = self.read_png_state(file_path)
+        self._resolve_state_source_paths(
+            state,
+            os.path.dirname(os.path.abspath(file_path)),
+        )
         return self.restore_state(state, merge=True)
+
+    @staticmethod
+    def _reload_source_path(element):
+        candidates = [
+            getattr(element, "source_path", ""),
+            getattr(element, "file_name", ""),
+        ]
+        for candidate in candidates:
+            if candidate and os.path.isfile(candidate):
+                return candidate
+        return None
+
+    @staticmethod
+    def _reload_preserved_style(element):
+        return {
+            "label": getattr(element, "label", ""),
+            "ls": getattr(element, "ls", "-"),
+            "axis": getattr(element, "axis", "left"),
+            "is_background": getattr(element, "is_background", False),
+            "background_group": getattr(element, "background_group", None),
+            "background_label": getattr(element, "background_label", None),
+        }
+
+    def reload_all(self):
+        paths = []
+        seen_paths = set()
+        missing = []
+        preserved_styles = {}
+
+        for element in self._elements:
+            signature = getattr(element, "signature", "")
+            if signature:
+                preserved_styles[signature] = self._reload_preserved_style(element)
+
+            source_path = self._reload_source_path(element)
+            if source_path:
+                normalized_path = os.path.abspath(source_path)
+                if normalized_path not in seen_paths:
+                    paths.append(normalized_path)
+                    seen_paths.add(normalized_path)
+            else:
+                missing.append(
+                    getattr(element, "file_name", "") or signature or "<unknown>"
+                )
+
+        if not paths:
+            raise FileNotFoundError("No source CSV files are available for reload.")
+
+        self._elements = []
+        self._element_counter = 0
+        self.catch(paths)
+
+        for element in self._elements:
+            preserved = preserved_styles.get(getattr(element, "signature", ""))
+            if not preserved:
+                continue
+            for attr, value in preserved.items():
+                setattr(element, attr, copy.deepcopy(value))
+
+        return {
+            "paths": paths,
+            "element_count": len(self._elements),
+            "missing": missing,
+        }
 
     def _create_elements_from_csv(self, file_path, df):
         """
@@ -452,6 +541,7 @@ class HyperPlot:
         - df: A pandas DataFrame containing the CSV data.
         """
         x_label = df.columns[0]  # First column is x-axis label
+        source_path = os.path.abspath(file_path)
         for i in range(1, df.shape[1]):
             y_label = df.columns[i]  # Remaining columns are y-axis labels
             y = df.iloc[:, i]
@@ -474,6 +564,7 @@ class HyperPlot:
                 existing_element.x = x
                 existing_element.y = y
                 existing_element.file_name = os.path.basename(file_path)
+                existing_element.source_path = source_path
                 existing_element.x_label = x_label
                 existing_element.y_label = y_label
                 existing_element.is_background = getattr(
@@ -493,6 +584,7 @@ class HyperPlot:
                     label=y_label,
                     ls="-",
                     file_name=os.path.basename(file_path),
+                    source_path=source_path,
                     x_label=x_label,
                     y_label=y_label,
                     signature=signature,

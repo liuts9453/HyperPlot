@@ -87,6 +87,7 @@ class HyperPlotBackendTest(unittest.TestCase):
             self.assertEqual(len(plotter._elements), 2)
             self.assertEqual([element.label for element in plotter._elements], ["a", "b"])
             self.assertEqual(plotter._elements[0].file_name, "data.csv")
+            self.assertEqual(plotter._elements[0].source_path, os.path.abspath(csv_path))
 
     def test_list_catch_preserves_all_new_elements_in_last_catch(self):
         with tempfile.TemporaryDirectory() as tempdir:
@@ -289,6 +290,59 @@ class HyperPlotBackendTest(unittest.TestCase):
             self.assertEqual(restored_count, 1)
             self.assertEqual(restored._elements[0].label, "Experiment")
             self.assertEqual(restored._elements[0].ls, "-r")
+            self.assertEqual(restored._elements[0].source_path, os.path.abspath(csv_path))
+
+    def test_reload_all_refreshes_csv_data_and_preserves_style(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            csv_path = os.path.join(tempdir, "data.csv")
+            write_csv(csv_path)
+
+            plotter = HyperPlot.HyperPlot()
+            plotter.catch(csv_path)
+            plotter.toggle_axis([1])
+            plotter.set_background([0])
+            plotter._apply_styles(plotter._elements, "Envelope==-r|Simulation==--b")
+
+            write_csv(
+                csv_path,
+                rows=[
+                    (0.0, 10.0, 20.0),
+                    (1.0, 11.0, 21.0),
+                ],
+            )
+
+            result = plotter.reload_all()
+
+            self.assertEqual(result["element_count"], 2)
+            self.assertEqual(result["paths"], [os.path.abspath(csv_path)])
+            self.assertEqual(plotter._elements[0].background_label, "Envelope")
+            self.assertEqual(plotter._elements[0].ls, "-r")
+            self.assertTrue(plotter._elements[0].is_background)
+            self.assertEqual(plotter._elements[1].label, "Simulation")
+            self.assertEqual(plotter._elements[1].ls, "--b")
+            self.assertEqual(plotter._elements[1].axis, "right")
+            self.assertEqual(list(plotter._elements[0].y), [10.0, 11.0])
+
+    def test_legacy_svg_state_resolves_source_path_from_svg_directory(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            csv_path = os.path.join(tempdir, "data.csv")
+            svg_path = os.path.join(tempdir, "legacy.svg")
+            write_csv(csv_path)
+
+            plotter = HyperPlot.HyperPlot()
+            plotter.catch(csv_path)
+            state = plotter.to_state()
+            for element_state in state["elements"]:
+                element_state.pop("source_path", None)
+
+            with open(svg_path, "w", encoding="utf-8") as file:
+                file.write('<svg xmlns="http://www.w3.org/2000/svg"><metadata /></svg>')
+            plotter._write_svg_state(svg_path, state)
+
+            restored = HyperPlot.HyperPlot()
+            restored.catch_svg(svg_path)
+
+            self.assertEqual(restored._elements[0].source_path, os.path.abspath(csv_path))
 
     def test_png_state_roundtrip_if_pillow_is_available(self):
         try:
