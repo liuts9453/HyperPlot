@@ -523,7 +523,37 @@ class PlotApp:
                 self.selection_list.selection_set(index)
         self.log_message("Inverted Workbench selection.")
 
+    def selected_element_signatures(self):
+        signatures = []
+        for index in self.selected_element_indices():
+            if index >= len(self.plotter._elements):
+                continue
+            signature = getattr(self.plotter._elements[index], "signature", "")
+            if signature:
+                signatures.append(signature)
+        return signatures
+
+    def restore_selection(self, signatures, fallback_indices):
+        self.selection_list.selection_clear(0, tk.END)
+        signature_set = set(signatures)
+        restored_count = 0
+        if signature_set:
+            for index, element in enumerate(self.plotter._elements):
+                if getattr(element, "signature", "") in signature_set:
+                    self.selection_list.selection_set(index)
+                    restored_count += 1
+
+        if restored_count == 0:
+            for index in fallback_indices:
+                if index < self.selection_list.size():
+                    self.selection_list.selection_set(index)
+                    restored_count += 1
+
+        return restored_count
+
     def reload_all_curves(self):
+        selected_indices = self.selected_element_indices()
+        selected_signatures = self.selected_element_signatures()
         try:
             self.update_plotter_property()
             result = self.plotter.reload_all()
@@ -537,8 +567,8 @@ class PlotApp:
         self.populate_tree()
         self.update_palette_preview()
         self.update_selection_list()
-        if self.selection_list.size():
-            self.selection_list.selection_set(0, tk.END)
+        restored_count = self.restore_selection(selected_signatures, selected_indices)
+        if restored_count:
             self.update_plot_view(self.get_current_plot(), self.preview_frame)
             self.notebook.select(self.preview_frame)
 
