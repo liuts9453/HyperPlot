@@ -1290,8 +1290,8 @@ class HyperPlot:
             )
             return
 
-        min_x = max(x_values[0] for x_values, _ in cleaned)
-        max_x = min(x_values[-1] for x_values, _ in cleaned)
+        min_x = min(x_values[0] for x_values, _ in cleaned)
+        max_x = max(x_values[-1] for x_values, _ in cleaned)
         if min_x >= max_x:
             for i, (x_values, y_values) in enumerate(cleaned):
                 ax.plot(
@@ -1304,16 +1304,57 @@ class HyperPlot:
                 )
             return
 
-        common_x = np.linspace(min_x, max_x, self._background_points())
-        interpolated = np.array(
-            [
-                np.interp(common_x, x_values, y_values)
-                for x_values, y_values in cleaned
-            ]
+        endpoints = np.array(
+            [x for x_values, _ in cleaned for x in (x_values[0], x_values[-1])],
+            dtype=float,
         )
-        y_min = np.nanmin(interpolated, axis=0)
-        y_max = np.nanmax(interpolated, axis=0)
-        ax.fill_between(common_x, y_min, y_max, color=color, alpha=alpha, label=label)
+        common_x = np.unique(
+            np.concatenate(
+                [np.linspace(min_x, max_x, self._background_points()), endpoints]
+            )
+        )
+        interpolated = []
+
+        def add_interpolated_series(x_values, y_values):
+            y_interp = np.full(common_x.shape, np.nan, dtype=float)
+            in_range = (common_x >= x_values[0]) & (common_x <= x_values[-1])
+            if np.any(in_range):
+                y_interp[in_range] = np.interp(common_x[in_range], x_values, y_values)
+            interpolated.append(y_interp)
+
+        for x_values, y_values in cleaned:
+            add_interpolated_series(x_values, y_values)
+
+        # Cap the envelope by connecting curve heads and tails into the polygon.
+        for points in (
+            [(x_values[0], y_values[0]) for x_values, y_values in cleaned],
+            [(x_values[-1], y_values[-1]) for x_values, y_values in cleaned],
+        ):
+            ordered_points = sorted(points, key=lambda point: (point[0], point[1]))
+            for start, end in zip(ordered_points, ordered_points[1:]):
+                if start[0] == end[0]:
+                    continue
+                add_interpolated_series(
+                    np.array([start[0], end[0]], dtype=float),
+                    np.array([start[1], end[1]], dtype=float),
+                )
+
+        interpolated = np.ma.masked_invalid(np.array(interpolated))
+        y_min = np.asarray(interpolated.min(axis=0).filled(np.nan), dtype=float)
+        y_max = np.asarray(interpolated.max(axis=0).filled(np.nan), dtype=float)
+        valid = np.isfinite(y_min) & np.isfinite(y_max)
+        if not np.any(valid):
+            return
+
+        ax.fill_between(
+            common_x,
+            y_min,
+            y_max,
+            where=valid,
+            color=color,
+            alpha=alpha,
+            label=label,
+        )
 
     def _plot_curve(self, ax, element, colors):
         x_values, y_values = self._limited_xy(element)

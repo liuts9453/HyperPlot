@@ -183,10 +183,11 @@ Experimental range==b|Simulation==-r
 
 如果背景组里有多条曲线，HyperPlot 会：
 
-1. 找到所有曲线共同覆盖的 x 范围。
-2. 插值到统一的 `background_points` 网格。
-3. 计算 `y_min` 和 `y_max`。
-4. 用 `fill_between` 画半透明包络。
+1. 找到所有曲线覆盖的 x 并集范围。
+2. 把曲线头部和尾部各自连成包络边界，形成闭合多边形。
+3. 插值到统一的 `background_points` 网格。
+4. 计算 `y_min` 和 `y_max`。
+5. 用 `fill_between` 画半透明包络。
 
 相关属性：
 

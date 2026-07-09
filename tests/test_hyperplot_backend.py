@@ -148,6 +148,46 @@ class HyperPlotBackendTest(unittest.TestCase):
             self.assertEqual(plotter._elements[2].label, "Centerline")
             self.assertEqual(plotter._elements[2].ls, "--b")
 
+    def test_background_group_connects_curve_heads_into_polygon(self):
+        plotter = HyperPlot.HyperPlot(background_points=7)
+        plotter._elements = [
+            HyperPlot.PlotElement(
+                [0.0, 1.0, 2.0],
+                [0.0, 0.0, 0.0],
+                label="lower",
+                ls="-r",
+                is_background=True,
+                background_group="group",
+                background_label="Envelope",
+            ),
+            HyperPlot.PlotElement(
+                [1.0, 2.0, 3.0],
+                [2.0, 2.0, 2.0],
+                label="upper",
+                ls="-r",
+                is_background=True,
+                background_group="group",
+                background_label="Envelope",
+            ),
+        ]
+
+        fig = plotter.get_plot([0, 1], "")
+        ax = fig.axes[0]
+        envelope = ax.collections[0]
+        vertices = envelope.get_paths()[0].vertices
+        xs = [vertex[0] for vertex in vertices]
+        ys_at_half = sorted(
+            {
+                round(vertex[1], 6)
+                for vertex in vertices
+                if abs(vertex[0] - 0.5) < 1e-9
+            }
+        )
+
+        self.assertEqual(round(min(xs), 6), 0.0)
+        self.assertEqual(round(max(xs), 6), 3.0)
+        self.assertEqual(ys_at_half, [0.0, 1.0])
+
     def test_template_save_load_roundtrip(self):
         with tempfile.TemporaryDirectory() as tempdir:
             template_path = os.path.join(tempdir, "custom.hpt.json")
