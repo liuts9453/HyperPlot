@@ -1,10 +1,11 @@
 import copy
+import csv
 import json
 import math
 import os
 import warnings
 from datetime import datetime
-from itertools import cycle
+from itertools import cycle, zip_longest
 
 from .models import PlotElement
 from .settings import (
@@ -488,11 +489,32 @@ class HyperPlot:
             "background_label": getattr(element, "background_label", None),
         }
 
+    @staticmethod
+    def _element_source_key(element):
+        """Return a file identity suitable for grouping related plot elements."""
+        source_path = getattr(element, "source_path", "")
+        if source_path:
+            return ("path", os.path.normcase(os.path.abspath(source_path)))
+
+        file_name = getattr(element, "file_name", "")
+        if file_name:
+            return ("file", os.path.normcase(file_name))
+
+        # Elements created directly by callers have no reliable source grouping.
+        return ("element", id(element))
+
+    @staticmethod
+    def _element_signature(file_name, x_label, y_label):
+        stem = os.path.basename(file_name).replace(".csv", "")
+        return f"{stem}_{x_label}_{y_label}".replace(" ", "")
+
     def reload_all(self):
         paths = []
         seen_paths = set()
         missing = []
         preserved_styles = {}
+        x_columns = {}
+        y_column_order = {}
 
         for element in self._elements:
             signature = getattr(element, "signature", "")
@@ -505,6 +527,13 @@ class HyperPlot:
                 if normalized_path not in seen_paths:
                     paths.append(normalized_path)
                     seen_paths.add(normalized_path)
+                x_columns.setdefault(
+                    normalized_path,
+                    getattr(element, "x_label", None),
+                )
+                y_column_order.setdefault(normalized_path, []).append(
+                    getattr(element, "y_label", getattr(element, "label", ""))
+                )
             else:
                 missing.append(
                     getattr(element, "file_name", "") or signature or "<unknown>"
@@ -515,7 +544,30 @@ class HyperPlot:
 
         self._elements = []
         self._element_counter = 0
-        self.catch(paths)
+        self.catch(paths, x_columns=x_columns)
+
+        path_positions = {path: position for position, path in enumerate(paths)}
+        y_positions = {
+            path: {label: position for position, label in enumerate(labels)}
+            for path, labels in y_column_order.items()
+        }
+        indexed_elements = list(enumerate(self._elements))
+        indexed_elements.sort(
+            key=lambda item: (
+                path_positions.get(
+                    os.path.abspath(getattr(item[1], "source_path", "")),
+                    len(path_positions),
+                ),
+                y_positions.get(
+                    os.path.abspath(getattr(item[1], "source_path", "")),
+                    {},
+                ).get(
+                    getattr(item[1], "y_label", getattr(item[1], "label", "")),
+                    len(self._elements) + item[0],
+                ),
+            )
+        )
+        self._elements = [element for _, element in indexed_elements]
 
         for element in self._elements:
             preserved = preserved_styles.get(getattr(element, "signature", ""))
@@ -530,7 +582,7 @@ class HyperPlot:
             "missing": missing,
         }
 
-    def _create_elements_from_csv(self, file_path, df):
+    def _create_elements_from_csv(self, file_path, df, x_column=None):
         """
         Converts CSV data into PlotElement objects and stores them in _elements with unique labels.
         If an element with the same label already exists, it will be overwritten.
@@ -539,17 +591,33 @@ class HyperPlot:
         Parameters:
         - file_path: The file path to the CSV being processed.
         - df: A pandas DataFrame containing the CSV data.
+        - x_column: Optional column name to use instead of the first column.
         """
-        x_label = df.columns[0]  # First column is x-axis label
+        if not len(df.columns):
+            return
+
+        if x_column is not None and x_column in df.columns:
+            x_index = int(df.columns.get_loc(x_column))
+        else:
+            if x_column is not None:
+                print(
+                    f"Warning: X-axis column '{x_column}' no longer exists in "
+                    f"{os.path.basename(file_path)}. Using the first column instead."
+                )
+            x_index = 0
+
+        x_label = df.columns[x_index]
         source_path = os.path.abspath(file_path)
-        for i in range(1, df.shape[1]):
-            y_label = df.columns[i]  # Remaining columns are y-axis labels
+        for i in range(df.shape[1]):
+            if i == x_index:
+                continue
+            y_label = df.columns[i]
             y = df.iloc[:, i]
-            x = df.iloc[:, 0]
+            x = df.iloc[:, x_index]
 
             # Generate the label for the PlotElement (unique for each file and column)
-            signature = f"{os.path.basename(file_path).replace('.csv', '')}_{x_label}_{y_label}".replace(
-                " ", ""
+            signature = self._element_signature(
+                os.path.basename(file_path), x_label, y_label
             )
 
             # Check if an element with the same label already exists
@@ -596,34 +664,55 @@ class HyperPlot:
                 self._last_catch.append(new_element)
                 self._element_counter += 1
 
-    def catch(self, path_or_files):
+    def catch(self, path_or_files, x_columns=None):
         """
         Loads and processes one or more CSV files, converting each into PlotElement objects.
 
         Parameters:
         - path_or_files: Either a directory path (string) or a list of file paths (strings).
                          If a directory is provided, all CSV files in the directory will be processed.
+        - x_columns: Optional mapping of absolute CSV paths to x-axis column names.
         """
         import pandas as pd
 
         self._last_catch = []
+        x_columns = x_columns or {}
+        current_x_columns = {}
+        for element in self._elements:
+            source_path = getattr(element, "source_path", "")
+            if not source_path:
+                continue
+            current_x_columns.setdefault(
+                os.path.abspath(source_path),
+                getattr(element, "x_label", None),
+            )
+
+        def create_elements(file_path):
+            df = pd.read_csv(file_path, sep=self.seperator, engine="python")
+            normalized_path = os.path.abspath(file_path)
+            self._create_elements_from_csv(
+                file_path,
+                df,
+                x_column=x_columns.get(
+                    normalized_path,
+                    current_x_columns.get(normalized_path),
+                ),
+            )
+
         if isinstance(path_or_files, str) and os.path.isdir(path_or_files):
             # Process all CSV files in the directory
             for file in os.listdir(path_or_files):
                 if file.endswith(".csv"):
                     file_path = os.path.join(path_or_files, file)
-                    df = pd.read_csv(file_path, sep=self.seperator, engine="python")
-                    self._create_elements_from_csv(file_path, df)
+                    create_elements(file_path)
         elif isinstance(path_or_files, list):
             # Process multiple specified CSV files
             for file_path in path_or_files:
                 if file_path.endswith(".csv"):
-                    df = pd.read_csv(file_path, sep=self.seperator, engine="python")
-                    self._create_elements_from_csv(file_path, df)
+                    create_elements(file_path)
         elif isinstance(path_or_files, str) and path_or_files.endswith(".csv"):
             # Process a single CSV file
-            df = pd.read_csv(path_or_files, sep=self.seperator, engine="python")
-            self._create_elements_from_csv(path_or_files, df)
+            create_elements(path_or_files)
         return self
 
     def _valid_indices(self, indices):
@@ -641,6 +730,82 @@ class HyperPlot:
             self._elements.pop(index)
         self._element_counter = len(self._elements)
         return len(valid_indices)
+
+    def set_x_axis(self, index):
+        """Use one plotted column as the x axis for every curve from its source."""
+        index = int(index)
+        if not 0 <= index < len(self._elements):
+            raise IndexError("PlotElement index out of range.")
+
+        selected = self._elements[index]
+        source_key = self._element_source_key(selected)
+        source_elements = [
+            element
+            for element in self._elements
+            if self._element_source_key(element) == source_key
+        ]
+
+        new_x = selected.y
+        new_x_label = getattr(selected, "y_label", "") or getattr(
+            selected, "label", ""
+        )
+        old_x = selected.x
+        old_x_label = getattr(selected, "x_label", "") or "x"
+
+        if new_x_label == old_x_label:
+            return {
+                "file_name": getattr(selected, "file_name", ""),
+                "x_label": new_x_label,
+                "old_x_label": old_x_label,
+                "curve_count": len(source_elements),
+            }
+
+        try:
+            new_x_length = len(new_x)
+        except TypeError as exc:
+            raise ValueError("The selected X-axis column is not array-like.") from exc
+
+        try:
+            np.asarray(new_x, dtype=float)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"X-axis column '{new_x_label}' must contain numeric values."
+            ) from exc
+
+        if any(len(element.y) != new_x_length for element in source_elements):
+            raise ValueError(
+                "All columns from the same source must have the same length "
+                "before changing the X axis."
+            )
+
+        for element in source_elements:
+            element.x = new_x
+            element.x_label = new_x_label
+
+            if element is selected:
+                # The old x column becomes a normal curve, keeping every source
+                # column available for a later axis change.
+                element.y = old_x
+                element.y_label = old_x_label
+                element.label = old_x_label
+                element.ls = "-"
+                element.axis = "left"
+                element.is_background = False
+                element.background_group = None
+                element.background_label = None
+
+            element.signature = self._element_signature(
+                getattr(element, "file_name", ""),
+                element.x_label,
+                getattr(element, "y_label", getattr(element, "label", "")),
+            )
+
+        return {
+            "file_name": getattr(selected, "file_name", ""),
+            "x_label": new_x_label,
+            "old_x_label": old_x_label,
+            "curve_count": len(source_elements),
+        }
 
     @staticmethod
     def _background_label(elements):
@@ -757,6 +922,107 @@ class HyperPlot:
                 }
             )
         return rows
+
+    @staticmethod
+    def _export_values(values):
+        if hasattr(values, "tolist"):
+            return values.tolist()
+        return list(values)
+
+    @staticmethod
+    def _same_export_x_values(first, other):
+        if len(first) != len(other):
+            return False
+        try:
+            return bool(
+                np.array_equal(
+                    np.asarray(first, dtype=float),
+                    np.asarray(other, dtype=float),
+                    equal_nan=True,
+                )
+            )
+        except (TypeError, ValueError):
+            return first == other
+
+    @staticmethod
+    def _unique_csv_header(header, used_headers):
+        base = str(header or "value").strip() or "value"
+        candidate = base
+        suffix = 2
+        while candidate in used_headers:
+            candidate = f"{base}_{suffix}"
+            suffix += 1
+        used_headers.add(candidate)
+        return candidate
+
+    @staticmethod
+    def _curve_export_label(element, fallback):
+        return (
+            getattr(element, "label", None)
+            or getattr(element, "y_label", None)
+            or f"curve_{fallback}"
+        )
+
+    def export_elements_csv(self, indices, out_path):
+        valid_indices = self._valid_indices(indices)
+        if not valid_indices:
+            raise ValueError("No elements selected for CSV export.")
+        if not out_path.lower().endswith(".csv"):
+            out_path = f"{out_path}.csv"
+
+        elements = [self._elements[index] for index in valid_indices]
+        curves = [
+            (
+                element,
+                self._export_values(element.x),
+                self._export_values(element.y),
+            )
+            for element in elements
+        ]
+        shared_x = all(
+            self._same_export_x_values(curves[0][1], x_values)
+            for _, x_values, _ in curves[1:]
+        )
+
+        used_headers = set()
+        if shared_x:
+            headers = [
+                self._unique_csv_header(
+                    getattr(elements[0], "x_label", None) or "x",
+                    used_headers,
+                )
+            ]
+            columns = [curves[0][1]]
+            for position, (element, _, y_values) in enumerate(curves, start=1):
+                headers.append(
+                    self._unique_csv_header(
+                        self._curve_export_label(element, position),
+                        used_headers,
+                    )
+                )
+                columns.append(y_values)
+        else:
+            headers = []
+            columns = []
+            for position, (element, x_values, y_values) in enumerate(curves, start=1):
+                label = self._curve_export_label(element, position)
+                x_label = getattr(element, "x_label", None) or "x"
+                headers.extend(
+                    [
+                        self._unique_csv_header(f"{label} {x_label}", used_headers),
+                        self._unique_csv_header(label, used_headers),
+                    ]
+                )
+                columns.extend([x_values, y_values])
+
+        folder = os.path.dirname(out_path)
+        if folder:
+            self._ensure_folder_exist(folder)
+        with open(out_path, "w", newline="", encoding="utf-8") as file:
+            writer = csv.writer(file)
+            writer.writerow(headers)
+            writer.writerows(zip_longest(*columns, fillvalue=""))
+        return out_path
 
     def _ensure_folder_exist(self, folder):
         """

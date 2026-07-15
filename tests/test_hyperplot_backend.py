@@ -1,3 +1,4 @@
+import csv
 import math
 import os
 import tempfile
@@ -88,6 +89,314 @@ class HyperPlotBackendTest(unittest.TestCase):
             self.assertEqual([element.label for element in plotter._elements], ["a", "b"])
             self.assertEqual(plotter._elements[0].file_name, "data.csv")
             self.assertEqual(plotter._elements[0].source_path, os.path.abspath(csv_path))
+
+    def test_set_x_axis_swaps_selected_y_with_previous_x(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            csv_path = os.path.join(tempdir, "data.csv")
+            write_csv(
+                csv_path,
+                columns=("time", "stress", "temperature"),
+                rows=[
+                    (0.0, 10.0, 100.0),
+                    (1.0, 11.0, 101.0),
+                    (2.0, 12.0, 102.0),
+                ],
+            )
+
+            plotter = HyperPlot.HyperPlot()
+            plotter.catch(csv_path)
+            result = plotter.set_x_axis(1)
+
+            self.assertEqual(result["x_label"], "temperature")
+            self.assertEqual(result["file_name"], "data.csv")
+            self.assertEqual(result["curve_count"], 2)
+            self.assertEqual(
+                [element.y_label for element in plotter._elements],
+                ["stress", "time"],
+            )
+            self.assertEqual(plotter._elements[1].label, "time")
+            self.assertEqual(list(plotter._elements[1].y), [0.0, 1.0, 2.0])
+            for element in plotter._elements:
+                self.assertEqual(element.x_label, "temperature")
+                self.assertEqual(list(element.x), [100.0, 101.0, 102.0])
+
+    def test_set_x_axis_updates_only_the_selected_source_file(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            first_dir = os.path.join(tempdir, "first")
+            second_dir = os.path.join(tempdir, "second")
+            os.makedirs(first_dir)
+            os.makedirs(second_dir)
+            first_path = os.path.join(first_dir, "data.csv")
+            second_path = os.path.join(second_dir, "data.csv")
+            write_csv(
+                first_path,
+                columns=("time", "a", "b"),
+                rows=[
+                    (0.0, 1.0, 10.0),
+                    (1.0, 2.0, 20.0),
+                ],
+            )
+            write_csv(
+                second_path,
+                columns=("step", "c", "d"),
+                rows=[
+                    (5.0, 50.0, 500.0),
+                    (6.0, 60.0, 600.0),
+                ],
+            )
+
+            plotter = HyperPlot.HyperPlot()
+            plotter.catch([first_path, second_path])
+            second_elements_before = [
+                (
+                    element.x_label,
+                    element.y_label,
+                    list(element.x),
+                    list(element.y),
+                )
+                for element in plotter._elements
+                if element.source_path == os.path.abspath(second_path)
+            ]
+
+            result = plotter.set_x_axis(1)
+
+            self.assertEqual(result["file_name"], "data.csv")
+            self.assertEqual(result["x_label"], "b")
+            self.assertEqual(result["curve_count"], 2)
+            first_elements = [
+                element
+                for element in plotter._elements
+                if element.source_path == os.path.abspath(first_path)
+            ]
+            self.assertEqual(
+                [element.x_label for element in first_elements],
+                ["b", "b"],
+            )
+            self.assertTrue(
+                all(list(element.x) == [10.0, 20.0] for element in first_elements)
+            )
+            second_elements_after = [
+                (
+                    element.x_label,
+                    element.y_label,
+                    list(element.x),
+                    list(element.y),
+                )
+                for element in plotter._elements
+                if element.source_path == os.path.abspath(second_path)
+            ]
+            self.assertEqual(second_elements_after, second_elements_before)
+
+    def test_set_x_axis_can_switch_back_to_the_default_x_column(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            csv_path = os.path.join(tempdir, "data.csv")
+            write_csv(
+                csv_path,
+                columns=("x", "a", "b"),
+                rows=[
+                    (0.0, 1.0, 10.0),
+                    (1.0, 2.0, 20.0),
+                ],
+            )
+
+            plotter = HyperPlot.HyperPlot()
+            plotter.catch(csv_path)
+            plotter.set_x_axis(1)
+            old_x_index = next(
+                index
+                for index, element in enumerate(plotter._elements)
+                if element.y_label == "x"
+            )
+
+            result = plotter.set_x_axis(old_x_index)
+
+            self.assertEqual(result["x_label"], "x")
+            self.assertEqual(result["curve_count"], 2)
+            self.assertEqual(
+                [element.y_label for element in plotter._elements],
+                ["a", "b"],
+            )
+            self.assertEqual(
+                [list(element.y) for element in plotter._elements],
+                [[1.0, 2.0], [10.0, 20.0]],
+            )
+            for element in plotter._elements:
+                self.assertEqual(element.x_label, "x")
+                self.assertEqual(list(element.x), [0.0, 1.0])
+
+    def test_catching_the_same_source_again_keeps_its_custom_x_axis(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            csv_path = os.path.join(tempdir, "data.csv")
+            write_csv(csv_path)
+
+            plotter = HyperPlot.HyperPlot()
+            plotter.catch(csv_path)
+            plotter.set_x_axis(1)
+
+            plotter.catch(csv_path)
+
+            self.assertEqual(len(plotter._elements), 2)
+            self.assertEqual(
+                [element.y_label for element in plotter._elements],
+                ["a", "x"],
+            )
+            self.assertEqual(
+                {element.x_label for element in plotter._elements},
+                {"b"},
+            )
+
+    def test_set_x_axis_rejects_non_numeric_columns_without_mutating_data(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            csv_path = os.path.join(tempdir, "data.csv")
+            write_csv(
+                csv_path,
+                columns=("x", "value", "category"),
+                rows=[
+                    (0.0, 1.0, "first"),
+                    (1.0, 2.0, "second"),
+                ],
+            )
+
+            plotter = HyperPlot.HyperPlot()
+            plotter.catch(csv_path)
+            before = [
+                (element.x_label, element.y_label, list(element.x), list(element.y))
+                for element in plotter._elements
+            ]
+
+            with self.assertRaisesRegex(ValueError, "must contain numeric values"):
+                plotter.set_x_axis(1)
+
+            after = [
+                (element.x_label, element.y_label, list(element.x), list(element.y))
+                for element in plotter._elements
+            ]
+            self.assertEqual(after, before)
+
+    def test_reload_all_preserves_custom_x_axis_and_other_curve_styles(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            csv_path = os.path.join(tempdir, "data.csv")
+            write_csv(
+                csv_path,
+                columns=("time", "a", "b", "c"),
+                rows=[
+                    (0.0, 1.0, 10.0, 100.0),
+                    (1.0, 2.0, 20.0, 200.0),
+                ],
+            )
+
+            plotter = HyperPlot.HyperPlot()
+            plotter.catch(csv_path)
+            plotter.update_element_style(
+                0,
+                label="Styled A",
+                ls="--r",
+                axis="right",
+            )
+            plotter.update_element_style(
+                2,
+                label="Styled C",
+                ls="-.b",
+                axis="left",
+            )
+            plotter.set_x_axis(1)
+
+            write_csv(
+                csv_path,
+                columns=("time", "a", "b", "c"),
+                rows=[
+                    (5.0, 11.0, 110.0, 101.0),
+                    (6.0, 12.0, 120.0, 201.0),
+                ],
+            )
+            result = plotter.reload_all()
+
+            self.assertEqual(result["element_count"], 3)
+            self.assertEqual(result["paths"], [os.path.abspath(csv_path)])
+            self.assertEqual(
+                {element.x_label for element in plotter._elements},
+                {"b"},
+            )
+            self.assertTrue(
+                all(
+                    list(element.x) == [110.0, 120.0]
+                    for element in plotter._elements
+                )
+            )
+            elements_by_y_label = {
+                element.y_label: element for element in plotter._elements
+            }
+            self.assertEqual(set(elements_by_y_label), {"time", "a", "c"})
+            self.assertEqual(
+                [element.y_label for element in plotter._elements],
+                ["a", "time", "c"],
+            )
+            self.assertEqual(list(elements_by_y_label["time"].y), [5.0, 6.0])
+            self.assertEqual(list(elements_by_y_label["a"].y), [11.0, 12.0])
+            self.assertEqual(elements_by_y_label["a"].label, "Styled A")
+            self.assertEqual(elements_by_y_label["a"].ls, "--r")
+            self.assertEqual(elements_by_y_label["a"].axis, "right")
+            self.assertEqual(list(elements_by_y_label["c"].y), [101.0, 201.0])
+            self.assertEqual(elements_by_y_label["c"].label, "Styled C")
+            self.assertEqual(elements_by_y_label["c"].ls, "-.b")
+            self.assertEqual(elements_by_y_label["c"].axis, "left")
+
+    def test_export_selected_elements_csv_uses_shared_x_when_possible(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            csv_path = os.path.join(tempdir, "data.csv")
+            export_path = os.path.join(tempdir, "selected.csv")
+            write_csv(csv_path)
+
+            plotter = HyperPlot.HyperPlot()
+            plotter.catch(csv_path)
+            result_path = plotter.export_elements_csv([0, 1], export_path)
+
+            with open(result_path, newline="", encoding="utf-8") as file:
+                rows = list(csv.reader(file))
+
+            self.assertEqual(result_path, export_path)
+            self.assertEqual(rows[0], ["x", "a", "b"])
+            self.assertEqual(
+                rows[1:],
+                [
+                    ["0.0", "1.0", "2.0"],
+                    ["1.0", "2.0", "4.0"],
+                    ["2.0", "3.0", "6.0"],
+                ],
+            )
+
+    def test_export_selected_elements_csv_keeps_separate_x_columns(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            export_path = os.path.join(tempdir, "selected.csv")
+            plotter = HyperPlot.HyperPlot()
+            plotter._elements = [
+                HyperPlot.PlotElement(
+                    x=[0.0, 1.0],
+                    y=[10.0, 11.0],
+                    label="low",
+                    x_label="time",
+                ),
+                HyperPlot.PlotElement(
+                    x=[0.0, 2.0],
+                    y=[20.0, 22.0],
+                    label="high",
+                    x_label="time",
+                ),
+            ]
+
+            plotter.export_elements_csv([0, 1], export_path)
+
+            with open(export_path, newline="", encoding="utf-8") as file:
+                rows = list(csv.reader(file))
+
+            self.assertEqual(rows[0], ["low time", "low", "high time", "high"])
+            self.assertEqual(
+                rows[1:],
+                [
+                    ["0.0", "10.0", "0.0", "20.0"],
+                    ["1.0", "11.0", "2.0", "22.0"],
+                ],
+            )
 
     def test_list_catch_preserves_all_new_elements_in_last_catch(self):
         with tempfile.TemporaryDirectory() as tempdir:

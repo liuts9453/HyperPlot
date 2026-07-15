@@ -28,7 +28,9 @@ python3 PlotCSV_GUI.py
 
 ## CSV 输入格式
 
-CSV 的第一列作为 x 轴数据，后续每一列都会成为一条 `PlotElement`。
+CSV 默认使用第一列作为 x 轴数据，后续每一列都会成为一条 `PlotElement`。
+导入后也可以在 `Workbench` 中右键任意曲线并选择 `Set as X Axis`，将该曲线对应的列设为所属 CSV 的新横轴。原横轴会同时回到曲线列表，因此可以用同样的方法切换回来。
+横轴列必须包含数值；非数值列会被拒绝，当前横轴保持不变。
 
 例如：
 
@@ -64,6 +66,8 @@ file.csv | x_label | curve_label | line_style | (Left Axis)
 右键菜单：
 
 - `Edit Curve...`：单独编辑曲线 legend、style 和左右轴。
+- `Set as X Axis`：把右键所指曲线的原始数据列设为该 CSV 的横轴；其他 CSV 不受影响。
+- `Export Selected CSV...`：把选中的曲线导出为 CSV。如果 x 数据一致，会共用一列 x；如果 x 数据不同，会为每条曲线保留独立的 x/y 列。
 - `Delete Selected`：删除选中的曲线。
 - `Set as Background`：把选中曲线设为同一个背景组。
 - `Unset Background`：取消选中曲线的背景状态。

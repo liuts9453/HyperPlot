@@ -1,6 +1,6 @@
 #!/home/liu/regular/bin/python
 from tkinterdnd2 import DND_FILES, TkinterDnD
-from tkinter import ttk, Menu, messagebox, simpledialog, Toplevel
+from tkinter import ttk, Menu, messagebox, simpledialog, filedialog, Toplevel
 import tkinter as tk
 import HyperPlot
 import os
@@ -74,6 +74,7 @@ class PlotApp:
         self._old_stdout = sys.stdout
         self._old_stderr = sys.stderr
         self._pending_log_messages = []
+        self._workbench_context_index = None
         self._stdout_redirector = PrintRedirector(self, self._old_stdout)
         self._stderr_redirector = PrintRedirector(self, self._old_stderr)
         sys.stdout = self._stdout_redirector
@@ -404,6 +405,12 @@ class PlotApp:
         self.common_menu.add_command(
             label="Edit Curve...", command=self.edit_selected_curve
         )
+        self.common_menu.add_command(
+            label="Set as X Axis", command=self.set_context_curve_as_x_axis
+        )
+        self.common_menu.add_command(
+            label="Export Selected CSV...", command=self.export_selected_curves_csv
+        )
         self.common_menu.add_separator()
         self.common_menu.add_command(
             label="Delete Selected", command=self.delete_selected_elements
@@ -652,6 +659,61 @@ class PlotApp:
         self.update_selection_list()
         self.log_message(f"Deleted {deleted_count} selected element(s).")
 
+    def set_context_curve_as_x_axis(self):
+        index = self._workbench_context_index
+        if index is None or not 0 <= index < len(self.plotter._elements):
+            self.log_message("No element selected for the X axis.")
+            return
+
+        try:
+            result = self.plotter.set_x_axis(index)
+        except (IndexError, TypeError, ValueError) as e:
+            self.log_message(f"Could not set X axis: {str(e)}")
+            messagebox.showerror("Set X Axis Failed", str(e))
+            return
+
+        self.update_selection_list()
+        if self.selection_list.curselection():
+            self.update_plot_view(self.get_current_plot(), self.preview_frame)
+            self.notebook.select(self.preview_frame)
+
+        self.log_message(
+            f"Set '{result['x_label']}' as the X axis for "
+            f"{result['file_name'] or 'the selected source'} "
+            f"({result['curve_count']} curve(s) updated)."
+        )
+
+    def export_selected_curves_csv(self):
+        selected_indices = self.selected_element_indices()
+        if not selected_indices:
+            self.log_message("No elements selected for CSV export.")
+            return
+
+        initial_file = self.output_input.get().strip() or "selected_curves.csv"
+        initial_root, initial_ext = os.path.splitext(initial_file)
+        if initial_ext.lower() != ".csv":
+            initial_file = f"{initial_root or 'selected_curves'}.csv"
+
+        initial_dir = self.plotter.outpath if os.path.isdir(self.plotter.outpath) else os.getcwd()
+        out_path = filedialog.asksaveasfilename(
+            title="Export Selected Curves",
+            initialdir=initial_dir,
+            initialfile=initial_file,
+            defaultextension=".csv",
+            filetypes=(("CSV files", "*.csv"), ("All files", "*.*")),
+        )
+        if not out_path:
+            return
+
+        try:
+            exported_path = self.plotter.export_elements_csv(selected_indices, out_path)
+            self.log_message(
+                f"Exported {len(selected_indices)} selected curve(s) to {exported_path}."
+            )
+        except Exception as e:
+            self.log_message(f"CSV export failed: {str(e)}")
+            messagebox.showerror("CSV Export Failed", str(e))
+
     def set_selected_as_background(self):
         selected_indices = self.selected_element_indices()
         if not selected_indices:
@@ -688,11 +750,23 @@ class PlotApp:
         return "break"
 
     def show_workbench_menu(self, event: tk.Event):
-        if self.selection_list.size():
-            index = self.selection_list.nearest(event.y)
-            if index not in self.selection_list.curselection():
-                self.selection_list.selection_clear(0, tk.END)
-                self.selection_list.selection_set(index)
+        self._workbench_context_index = None
+        if not self.selection_list.size():
+            return "break"
+
+        index = self.selection_list.nearest(event.y)
+        bounds = self.selection_list.bbox(index)
+        if not bounds:
+            return "break"
+
+        _, row_y, _, row_height = bounds
+        if not row_y <= event.y < row_y + row_height:
+            return "break"
+
+        self._workbench_context_index = index
+        if index not in self.selection_list.curselection():
+            self.selection_list.selection_clear(0, tk.END)
+            self.selection_list.selection_set(index)
         return self.show_menu(self.common_menu, event)
 
     def close_all_menus(self):
