@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+APP_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+ELECTRON_BIN="$APP_DIR/node_modules/.bin/electron"
+
+if [[ ! -x "$ELECTRON_BIN" ]]; then
+  message="HyperPlot Electron is not installed. Run: cd '$APP_DIR' && npm install"
+  if command -v notify-send >/dev/null 2>&1; then
+    notify-send "HyperPlot" "$message"
+  fi
+  printf '%s\n' "$message" >&2
+  exit 1
+fi
+
+python_candidates=()
+if [[ -n "${HYPERPLOT_PYTHON:-}" ]]; then
+  python_candidates+=("$HYPERPLOT_PYTHON")
+fi
+python_candidates+=(
+  "$APP_DIR/.venv/bin/python"
+  "${HOME:-}/miniforge/bin/python3"
+  "${HOME:-}/miniforge/envs/dof10/bin/python"
+)
+if command -v python3 >/dev/null 2>&1; then
+  python_candidates+=("$(command -v python3)")
+fi
+
+selected_python=""
+for candidate in "${python_candidates[@]}"; do
+  if [[ -n "$candidate" && -x "$candidate" ]] &&
+    MPLCONFIGDIR="${XDG_CACHE_HOME:-${TMPDIR:-/tmp}}/hyperplot-launch-check" \
+      "$candidate" -c "import matplotlib, numpy, pandas, PIL" >/dev/null 2>&1; then
+    selected_python="$candidate"
+    break
+  fi
+done
+
+if [[ -z "$selected_python" ]]; then
+  message="HyperPlot needs Python with matplotlib, numpy, pandas and Pillow."
+  if command -v notify-send >/dev/null 2>&1; then
+    notify-send "HyperPlot" "$message"
+  fi
+  printf '%s\n' "$message" >&2
+  exit 1
+fi
+
+export HYPERPLOT_PYTHON="$selected_python"
+exec "$ELECTRON_BIN" "$APP_DIR" "$@"

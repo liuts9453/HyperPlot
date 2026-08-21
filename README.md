@@ -1,18 +1,59 @@
 # HyperPlot 使用说明书
 
-HyperPlot 是一个面向 CSV 曲线数据的轻量绘图工具，包含两个入口：
+HyperPlot 是一个面向 CSV 曲线数据的轻量绘图工具。当前推荐入口是 Electron 桌面界面：
 
-- `PlotCSV_GUI.py`：图形界面，支持拖拽 CSV/SVG/PNG/模板文件。
+- `hyperplot-electron`：Electron 桌面界面，支持拖拽 CSV/SVG/PNG/模板文件。
+- `PlotCSV_GUI.py`：保留的旧版 Tkinter 界面，可作为兼容入口。
 - `HyperPlot.py`：后端绘图和状态管理模块，负责读数据、绘图、模板、SVG/PNG 元数据、背景包络等功能。
 
-推荐日常使用 GUI；需要批处理时可以直接调用 `HyperPlot.HyperPlot`。
+Electron 只负责桌面交互，数值和绘图仍由原来的 Python/Matplotlib 后端完成，因此原有模板和 SVG/PNG 状态完全兼容。需要批处理时可以直接调用 `HyperPlot.HyperPlot`。
 
 ## 快速开始
 
-启动 GUI：
+首次安装 Electron 依赖：
+
+```bash
+npm install
+```
+
+启动 Electron GUI：
+
+```bash
+./hyperplot-electron
+```
+
+也可以在开发终端里运行：
+
+```bash
+npm start
+```
+
+旧版 Tkinter GUI 仍可启动：
 
 ```bash
 python3 PlotCSV_GUI.py
+```
+
+## 注册为 Linux 桌面应用
+
+执行：
+
+```bash
+./scripts/install-desktop.sh
+```
+
+安装脚本会在当前用户的应用目录生成：
+
+```text
+~/.local/share/applications/hyperplot.desktop
+```
+
+之后可以从 GNOME/KDE/XFCE 的应用菜单搜索 `HyperPlot` 启动。`.desktop` 入口也接受 CSV、SVG、PNG 文件参数；程序已经运行时，再次打开文件会交给现有窗口。
+
+卸载菜单入口：
+
+```bash
+./scripts/uninstall-desktop.sh
 ```
 
 基本流程：
@@ -31,6 +72,7 @@ python3 PlotCSV_GUI.py
 CSV 默认使用第一列作为 x 轴数据，后续每一列都会成为一条 `PlotElement`。
 导入后也可以在 `Workbench` 中右键任意曲线并选择 `Set as X Axis`，将该曲线对应的列设为所属 CSV 的新横轴。原横轴会同时回到曲线列表，因此可以用同样的方法切换回来。
 横轴列必须包含数值；非数值列会被拒绝，当前横轴保持不变。
+曲线身份由“规范化的完整源路径 + x 列 + y 列”决定：重复导入同一路径会更新原曲线，不同目录下的同名 CSV 会作为不同数据源共存，`Reload` 也会分别重载。
 
 例如：
 
@@ -213,6 +255,7 @@ Experimental range==b|Simulation==-r
 | `plot_dpi` | 导出分辨率 |
 | `fig_width_cm` | 绘图区内框目标宽度，单位 cm；作用在坐标轴四方框以内，默认 `8.25` |
 | `fig_height_cm` | 绘图区内框目标高度，单位 cm；默认 `5.5` |
+| `show_legend` | 是否显示 legend，使用 `True` 或 `False`；默认 `True` |
 | `legend_line_length` | legend 线段长度 |
 | `legend_frame` | 是否显示 legend 边框，使用 `True` 或 `False` |
 | `label_decimal` | 兼容旧模板保留；右轴刻度现在会自动选择漂亮数值 |
@@ -373,6 +416,7 @@ hp.set_plot_preferences(
     plot_type="strain_stress_tempD",
     fig_width_cm=12,
     fig_height_cm=8,
+    show_legend=False,
     grid="True",
 )
 ```
@@ -456,12 +500,17 @@ legend==style
 ## 文件结构
 
 ```text
-PlotCSV_GUI.py   GUI 前端
-HyperPlot.py     兼容入口，保留旧的 import HyperPlot 用法
-hyperplot/       后端包：模型、设置、模板、状态读写和绘图工程逻辑
-templates/       模板目录
-plots/           默认输出目录
-tests/           后端回归测试
+electron/            Electron 主进程、隔离桥接、Web UI 与 Python JSON 后端
+assets/              应用图标
+desktop/             Linux .desktop 模板
+scripts/             桌面菜单安装与卸载脚本
+hyperplot-electron   桌面启动器，自动寻找可用 Python 环境
+PlotCSV_GUI.py       旧版 Tkinter GUI 兼容入口
+HyperPlot.py         兼容入口，保留旧的 import HyperPlot 用法
+hyperplot/           后端包：模型、设置、模板、状态读写和绘图工程逻辑
+templates/           模板目录
+plots/               默认输出目录
+tests/               后端和 Electron 桥接回归测试
 ```
 
 ## 设计边界

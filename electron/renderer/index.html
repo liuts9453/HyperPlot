@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1"
+    />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'"
+    />
+    <title>HyperPlot</title>
+    <link rel="stylesheet" href="./app.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 40 40">
+            <path d="M7 30.5 14.5 21l6 4.5L32.5 10" />
+            <circle cx="7" cy="30.5" r="2.1" />
+            <circle cx="14.5" cy="21" r="2.1" />
+            <circle cx="20.5" cy="25.5" r="2.1" />
+            <circle cx="32.5" cy="10" r="2.1" />
+          </svg>
+        </div>
+        <div>
+          <h1>HyperPlot</h1>
+          <p>Scientific curve studio</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <span id="backendStatus" class="backend-status">
+          <span></span> Connecting
+        </span>
+        <button id="openButton" class="button button-primary">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 4v11m0-11L8 8m4-4 4 4M5 14v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4" />
+          </svg>
+          Import
+        </button>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <section class="panel workbench-panel">
+        <div class="section-heading">
+          <div>
+            <span class="eyebrow">Data</span>
+            <div class="heading-line">
+              <h2>Workbench</h2>
+              <span id="selectionCount" class="count-badge">0 selected</span>
+            </div>
+          </div>
+          <div class="compact-actions">
+            <button id="selectAllButton" class="button button-quiet">All</button>
+            <button id="invertButton" class="button button-quiet">Invert</button>
+            <button id="reloadButton" class="button button-icon" title="Reload source CSV files">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M20 11a8 8 0 1 0-2.3 5.7M20 5v6h-6" />
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <div id="curveList" class="curve-list" aria-label="Imported curves">
+          <div class="empty-state">
+            <div class="empty-icon">
+              <svg viewBox="0 0 64 64" aria-hidden="true">
+                <path d="M10 46 23 29l10 8 20-25" />
+                <path d="M10 10v44h44" />
+              </svg>
+            </div>
+            <h3>Drop your data here</h3>
+            <p>CSV data, HyperPlot SVG/PNG state, or a plot template</p>
+            <button class="button button-secondary empty-open">Choose files</button>
+          </div>
+        </div>
+
+        <div class="style-area">
+          <label for="legendInput">Batch style</label>
+          <div class="input-help">
+            <input
+              id="legendInput"
+              type="text"
+              autocomplete="off"
+              spellcheck="false"
+              placeholder="Experiment==-ro | Simulation==--b"
+            />
+            <span title="legend==style, separated by |">?</span>
+          </div>
+          <div class="palette-row">
+            <span>Palette</span>
+            <div id="palette" class="palette"></div>
+          </div>
+        </div>
+
+        <div class="action-dock">
+          <div class="fast-csv">
+            <label class="switch">
+              <input id="fastCsvInput" type="checkbox" />
+              <span></span>
+            </label>
+            <div>
+              <strong>fastCSV</strong>
+              <small>Export immediately on import</small>
+            </div>
+          </div>
+          <div class="plot-actions">
+            <button id="plotButton" class="button button-primary">Plot</button>
+            <button id="axisButton" class="button button-secondary">Toggle axis</button>
+          </div>
+          <div class="output-row">
+            <input
+              id="outputInput"
+              type="text"
+              autocomplete="off"
+              placeholder="Output filename (optional)"
+            />
+            <button id="outputButton" class="button button-dark">Export…</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel inspector-panel">
+        <div class="tab-strip" role="tablist">
+          <button class="tab active" data-tab="preview" role="tab">
+            Preview
+          </button>
+          <button class="tab" data-tab="messages" role="tab">
+            Messages <span id="messageCount">0</span>
+          </button>
+        </div>
+
+        <div class="tab-stage">
+          <div id="previewTab" class="tab-page active">
+            <div id="previewEmpty" class="preview-empty">
+              <svg viewBox="0 0 160 120" aria-hidden="true">
+                <path d="M21 94V20M21 94h119" />
+                <path d="m30 82 26-30 21 13 34-42 20 9" />
+                <circle cx="56" cy="52" r="4" />
+                <circle cx="77" cy="65" r="4" />
+                <circle cx="111" cy="23" r="4" />
+              </svg>
+              <h3>Your preview will appear here</h3>
+              <p>Select one or more curves, then press Plot.</p>
+            </div>
+            <div id="previewCanvas" class="preview-canvas hidden">
+              <img id="previewImage" alt="Plot preview" />
+            </div>
+          </div>
+          <div id="messagesTab" class="tab-page">
+            <div class="message-toolbar">
+              <span>Session log</span>
+              <button id="clearMessagesButton" class="button button-quiet">Clear</button>
+            </div>
+            <div id="messageLog" class="message-log"></div>
+          </div>
+          <div id="stageBusy" class="stage-busy hidden" aria-live="polite">
+            <span class="spinner"></span>
+            <p>Rendering with Matplotlib…</p>
+          </div>
+        </div>
+
+        <div class="properties-header">
+          <div>
+            <span class="eyebrow">Appearance</span>
+            <h2>Plot properties</h2>
+          </div>
+          <button id="templateButton" class="button button-secondary">
+            Save template
+          </button>
+        </div>
+        <div id="properties" class="properties"></div>
+      </section>
+    </main>
+
+    <div id="contextMenu" class="context-menu hidden" role="menu">
+      <button data-action="edit">Edit curve…</button>
+      <button data-action="x-axis">Set as X axis</button>
+      <button data-action="export-csv">Export selected CSV…</button>
+      <div></div>
+      <button data-action="background">Set as background</button>
+      <button data-action="unbackground">Unset background</button>
+      <div></div>
+      <button data-action="delete" class="danger">Delete selected</button>
+    </div>
+
+    <dialog id="curveDialog" class="modal">
+      <form method="dialog">
+        <div class="modal-heading">
+          <div>
+            <span class="eyebrow">Curve</span>
+            <h2>Edit style</h2>
+          </div>
+          <button value="cancel" class="modal-close" aria-label="Close">×</button>
+        </div>
+        <label>
+          Legend
+          <input id="curveLegendInput" type="text" autocomplete="off" />
+        </label>
+        <label>
+          Matplotlib style
+          <input id="curveStyleInput" type="text" autocomplete="off" />
+        </label>
+        <label>
+          Axis
+          <select id="curveAxisInput">
+            <option value="left">Left axis</option>
+            <option value="right">Right axis</option>
+          </select>
+        </label>
+        <div class="modal-actions">
+          <button value="cancel" class="button button-quiet">Cancel</button>
+          <button id="curveApplyButton" value="default" class="button button-primary">
+            Apply
+          </button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="propertyDialog" class="modal small-modal">
+      <form method="dialog">
+        <div class="modal-heading">
+          <div>
+            <span class="eyebrow">Property</span>
+            <h2 id="propertyDialogTitle">Add entry</h2>
+          </div>
+          <button value="cancel" class="modal-close" aria-label="Close">×</button>
+        </div>
+        <label>
+          Name
+          <input id="propertyNameInput" type="text" autocomplete="off" />
+        </label>
+        <label>
+          Value
+          <input id="propertyValueInput" type="text" autocomplete="off" />
+        </label>
+        <div class="modal-actions">
+          <button value="cancel" class="button button-quiet">Cancel</button>
+          <button id="propertyAddButton" value="default" class="button button-primary">
+            Add
+          </button>
+        </div>
+      </form>
+    </dialog>
+
+    <div id="dropOverlay" class="drop-overlay hidden">
+      <div>
+        <svg viewBox="0 0 48 48" aria-hidden="true">
+          <path d="M24 31V8m0 0-8 8m8-8 8 8M8 29v8a3 3 0 0 0 3 3h26a3 3 0 0 0 3-3v-8" />
+        </svg>
+        <h2>Drop to import</h2>
+        <p>CSV · SVG · PNG · HyperPlot template</p>
+      </div>
+    </div>
+    <div id="toastStack" class="toast-stack" aria-live="polite"></div>
+
+    <script src="./app.js"></script>
+  </body>
+</html>

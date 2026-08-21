@@ -69,6 +69,7 @@ DEFAULT_SETTINGS = {
     "label_decimal": 0,
     "fig_width_cm": 8.25,
     "fig_height_cm": 5.5,
+    "show_legend": "True",
     "legend_line_length": 1.5,
     "legend_frame": "True",
     "marks": 10,
@@ -92,6 +93,7 @@ USER_PREFERENCES = {
     "label_decimal",
     "fig_width_cm",
     "fig_height_cm",
+    "show_legend",
     "legend_line_length",
     "legend_frame",
     "marks",
@@ -218,7 +220,7 @@ def validate_preference(name, value):
         return parsed
     elif name == "label_decimal":
         return int(float(value))
-    elif name in {"grid", "legend_frame"}:
+    elif name in {"grid", "show_legend", "legend_frame"}:
         return parse_bool(value)
     elif name in {"xmin", "xmax"}:
         return parse_optional_float(value, name)

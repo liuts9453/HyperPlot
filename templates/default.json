@@ -1,0 +1,41 @@
+{
+  "app": "HyperPlot",
+  "kind": "template",
+  "version": 1,
+  "created_at": "2026-07-27T01:27:50",
+  "preferences": {
+    "background_points": 1000,
+    "plot_dpi": 300,
+    "axis_labels": {
+      "Disp": "Displacement [mm]",
+      "Force": "Force [N]"
+    },
+    "plot_format": "png",
+    "show_legend": true,
+    "legend_line_length": 1.1,
+    "plot_type": "Disp_Force",
+    "xmax": null,
+    "legend_frame": true,
+    "marks": 16,
+    "right_axis_color": "red",
+    "color_palette": {
+      "b": "#4dbbd5",
+      "g": "#00a087",
+      "r": "#e64b35",
+      "c": "#3c5488",
+      "m": "#cc79a7",
+      "y": "#f39b7f",
+      "k": "black",
+      "w": "white"
+    },
+    "loc": "best",
+    "seperator": ",",
+    "xmin": null,
+    "label_decimal": 0,
+    "fig_height_cm": 5.5,
+    "fig_width_cm": 8.25,
+    "grid": false,
+    "fill": "none",
+    "background_alpha": 0.25
+  }
+}

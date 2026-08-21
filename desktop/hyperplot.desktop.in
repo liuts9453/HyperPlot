@@ -1,0 +1,15 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=HyperPlot
+GenericName=Scientific Curve Plotter
+Comment=Plot, style and export scientific CSV curve data
+Exec="@APP_DIR@/hyperplot-electron" %F
+TryExec=@APP_DIR@/hyperplot-electron
+Icon=@APP_DIR@/assets/hyperplot.svg
+Terminal=false
+Categories=Science;DataVisualization;
+Keywords=plot;csv;curve;matplotlib;science;
+MimeType=text/csv;image/svg+xml;image/png;
+StartupNotify=true
+StartupWMClass=HyperPlot

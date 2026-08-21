@@ -90,6 +90,127 @@ class HyperPlotBackendTest(unittest.TestCase):
             self.assertEqual(plotter._elements[0].file_name, "data.csv")
             self.assertEqual(plotter._elements[0].source_path, os.path.abspath(csv_path))
 
+    def test_same_named_csvs_from_different_paths_keep_distinct_elements(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            first_dir = os.path.join(tempdir, "first")
+            second_dir = os.path.join(tempdir, "second")
+            os.makedirs(first_dir)
+            os.makedirs(second_dir)
+            first_path = os.path.join(first_dir, "data.csv")
+            second_path = os.path.join(second_dir, "data.csv")
+            write_csv(
+                first_path,
+                rows=[
+                    (0.0, 1.0, 2.0),
+                    (1.0, 2.0, 4.0),
+                ],
+            )
+            write_csv(
+                second_path,
+                rows=[
+                    (0.0, 10.0, 20.0),
+                    (1.0, 20.0, 40.0),
+                ],
+            )
+
+            plotter = HyperPlot.HyperPlot()
+            plotter.catch([first_path, second_path])
+
+            self.assertEqual(len(plotter._elements), 4)
+            self.assertEqual(
+                {element.source_path for element in plotter._elements},
+                {os.path.abspath(first_path), os.path.abspath(second_path)},
+            )
+            self.assertEqual(
+                len({element.signature for element in plotter._elements}),
+                4,
+            )
+
+    def test_reimport_and_reload_identify_same_named_csvs_by_full_path(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            first_dir = os.path.join(tempdir, "first")
+            second_dir = os.path.join(tempdir, "second")
+            os.makedirs(first_dir)
+            os.makedirs(second_dir)
+            first_path = os.path.join(first_dir, "data.csv")
+            second_path = os.path.join(second_dir, "data.csv")
+            write_csv(first_path)
+            write_csv(
+                second_path,
+                rows=[
+                    (0.0, 10.0, 20.0),
+                    (1.0, 20.0, 40.0),
+                    (2.0, 30.0, 60.0),
+                ],
+            )
+
+            plotter = HyperPlot.HyperPlot()
+            plotter.catch([first_path, second_path])
+            first_a = next(
+                element
+                for element in plotter._elements
+                if element.source_path == os.path.abspath(first_path)
+                and element.y_label == "a"
+            )
+            second_a = next(
+                element
+                for element in plotter._elements
+                if element.source_path == os.path.abspath(second_path)
+                and element.y_label == "a"
+            )
+            first_signature = first_a.signature
+            second_signature = second_a.signature
+            first_a.label = "First A"
+            first_a.ls = "--r"
+            second_a.label = "Second A"
+            second_a.ls = "-.b"
+            second_a.axis = "right"
+
+            write_csv(
+                first_path,
+                rows=[
+                    (0.0, 101.0, 102.0),
+                    (1.0, 201.0, 204.0),
+                ],
+            )
+            plotter.catch(first_path)
+
+            self.assertEqual(len(plotter._elements), 4)
+            reimported_first_a = next(
+                element
+                for element in plotter._elements
+                if element.source_path == os.path.abspath(first_path)
+                and element.y_label == "a"
+            )
+            untouched_second_a = next(
+                element
+                for element in plotter._elements
+                if element.source_path == os.path.abspath(second_path)
+                and element.y_label == "a"
+            )
+            self.assertEqual(reimported_first_a.signature, first_signature)
+            self.assertEqual(untouched_second_a.signature, second_signature)
+            self.assertNotEqual(first_signature, second_signature)
+            self.assertEqual(list(reimported_first_a.y), [101.0, 201.0])
+            self.assertEqual(list(untouched_second_a.y), [10.0, 20.0, 30.0])
+
+            plotter.reload_all()
+            elements_by_source_and_column = {
+                (element.source_path, element.y_label): element
+                for element in plotter._elements
+            }
+            reloaded_first_a = elements_by_source_and_column[
+                (os.path.abspath(first_path), "a")
+            ]
+            reloaded_second_a = elements_by_source_and_column[
+                (os.path.abspath(second_path), "a")
+            ]
+            self.assertEqual(reloaded_first_a.label, "First A")
+            self.assertEqual(reloaded_first_a.ls, "--r")
+            self.assertEqual(reloaded_second_a.label, "Second A")
+            self.assertEqual(reloaded_second_a.ls, "-.b")
+            self.assertEqual(reloaded_second_a.axis, "right")
+
     def test_set_x_axis_swaps_selected_y_with_previous_x(self):
         with tempfile.TemporaryDirectory() as tempdir:
             csv_path = os.path.join(tempdir, "data.csv")
@@ -543,6 +664,17 @@ class HyperPlotBackendTest(unittest.TestCase):
 
             self.assertIsNotNone(legend)
             self.assertFalse(legend.get_frame().get_visible())
+
+    def test_legend_can_be_hidden(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            csv_path = os.path.join(tempdir, "data.csv")
+            write_csv(csv_path)
+
+            plotter = HyperPlot.HyperPlot(show_legend=False)
+            plotter.catch(csv_path)
+            fig = plotter.get_plot([0, 1], "Experiment==-r|Simulation==--b")
+
+            self.assertIsNone(fig.axes[0].get_legend())
 
     def test_axes_box_has_requested_physical_size(self):
         with tempfile.TemporaryDirectory() as tempdir:

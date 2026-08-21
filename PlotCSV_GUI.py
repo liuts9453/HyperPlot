@@ -57,6 +57,7 @@ class PlotApp:
             "axis_labels",
             "loc",
             "plot_dpi",
+            "show_legend",
             "legend_line_length",
             "legend_frame",
             "label_decimal",
@@ -955,13 +956,29 @@ class PlotApp:
         """将 plotter 的元素更新到 Listbox 中"""
         selected_indices = self.selection_list.curselection()
         self.selection_list.delete(0, tk.END)  # 清除当前列表内容
-        for row in self.plotter.element_rows():
+        rows = self.plotter.element_rows()
+        sources_by_file_name = {}
+        for row in rows:
+            source_path = row.get("source_path", "")
+            if source_path:
+                sources_by_file_name.setdefault(row["file_name"], set()).add(
+                    os.path.normcase(os.path.realpath(source_path))
+                )
+
+        for row in rows:
             # 根据元素属性添加到 Listbox
             axis_info = "(Right Axis)" if row["axis"] == "right" else "(Left Axis)"
             background_info = " | [BG]" if row["is_background"] else ""
+            display_file_name = row["file_name"]
+            if len(sources_by_file_name.get(row["file_name"], ())) > 1:
+                parent_name = os.path.basename(
+                    os.path.dirname(row.get("source_path", ""))
+                )
+                if parent_name:
+                    display_file_name = f"{parent_name}/{display_file_name}"
             self.selection_list.insert(
                 tk.END,
-                f"{row['file_name']} | {row['x_label']} | {row['label']} | {row['ls']}{background_info} | {axis_info}",
+                f"{display_file_name} | {row['x_label']} | {row['label']} | {row['ls']}{background_info} | {axis_info}",
             )
         for index in selected_indices:
             self.selection_list.selection_set(index)

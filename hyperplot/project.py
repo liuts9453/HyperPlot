@@ -1,5 +1,6 @@
 import copy
 import csv
+import hashlib
 import json
 import math
 import os
@@ -130,6 +131,7 @@ class HyperPlot:
         - plot_dpi: Resolution in dots per inch for saving plots (default is 300 dpi).
         - plot_format: Format in which the plot will be saved (default is 'svg').
         - loc: Legend location in the plot, accepts Matplotlib location strings like 'best', 'upper right', etc.
+        - show_legend: Whether to display the legend (default is True).
         """
         self.set_plot_preferences(**copy.deepcopy(DEFAULT_SETTINGS))
         self._last_catch = []
@@ -371,9 +373,24 @@ class HyperPlot:
         source_path = element_state.get("source_path", "")
         x_label = element_state.get("x_label", "")
         y_label = element_state.get("y_label", element_state.get("label", ""))
-        signature = element_state.get("signature") or (
-            f"{file_name}_{x_label}_{y_label}".replace(" ", "")
-        )
+        persisted_signature = element_state.get("signature", "")
+        if source_path:
+            # Rebuild old basename-only signatures as path-aware signatures.
+            # This also makes imported legacy SVG/PNG state follow the same
+            # identity rules as a freshly imported CSV.
+            signature = self._element_signature(
+                source_path,
+                x_label,
+                y_label,
+                file_name=file_name,
+            )
+        else:
+            signature = persisted_signature or self._element_signature(
+                "",
+                x_label,
+                y_label,
+                file_name=file_name,
+            )
         element = PlotElement(
             x=x,
             y=y,
@@ -489,12 +506,12 @@ class HyperPlot:
             "background_label": getattr(element, "background_label", None),
         }
 
-    @staticmethod
-    def _element_source_key(element):
+    @classmethod
+    def _element_source_key(cls, element):
         """Return a file identity suitable for grouping related plot elements."""
         source_path = getattr(element, "source_path", "")
         if source_path:
-            return ("path", os.path.normcase(os.path.abspath(source_path)))
+            return ("path", cls._canonical_source_path(source_path))
 
         file_name = getattr(element, "file_name", "")
         if file_name:
@@ -504,9 +521,41 @@ class HyperPlot:
         return ("element", id(element))
 
     @staticmethod
-    def _element_signature(file_name, x_label, y_label):
-        stem = os.path.basename(file_name).replace(".csv", "")
-        return f"{stem}_{x_label}_{y_label}".replace(" ", "")
+    def _canonical_source_path(source_path):
+        """Return one stable identity for equivalent spellings of a path."""
+        if not source_path:
+            return ""
+        return os.path.normcase(
+            os.path.realpath(os.path.abspath(os.path.expanduser(source_path)))
+        )
+
+    @classmethod
+    def _element_signature(
+        cls,
+        source_path,
+        x_label,
+        y_label,
+        *,
+        file_name="",
+    ):
+        """Identify a curve by canonical source path and its x/y columns.
+
+        The filename fallback is only for legacy/pathless embedded state. CSV
+        imports always provide ``source_path``, so equal paths overwrite while
+        equal basenames in different directories remain distinct.
+        """
+        canonical_path = cls._canonical_source_path(source_path)
+        if canonical_path:
+            source_identity = f"path:{canonical_path}"
+        else:
+            source_identity = f"name:{os.path.normcase(str(file_name))}"
+        payload = json.dumps(
+            [source_identity, str(x_label), str(y_label)],
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+        digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()
+        return f"path-v1:{digest}"
 
     def reload_all(self):
         paths = []
@@ -617,7 +666,10 @@ class HyperPlot:
 
             # Generate the label for the PlotElement (unique for each file and column)
             signature = self._element_signature(
-                os.path.basename(file_path), x_label, y_label
+                source_path,
+                x_label,
+                y_label,
+                file_name=os.path.basename(file_path),
             )
 
             # Check if an element with the same label already exists
@@ -627,7 +679,8 @@ class HyperPlot:
 
             if existing_element:
                 print(
-                    f"Warning: Element with signature label '{signature}' already exists. Overwriting it."
+                    "Warning: Curve from the same source path and columns "
+                    "already exists. Overwriting it."
                 )
                 existing_element.x = x
                 existing_element.y = y
@@ -795,9 +848,10 @@ class HyperPlot:
                 element.background_label = None
 
             element.signature = self._element_signature(
-                getattr(element, "file_name", ""),
+                getattr(element, "source_path", ""),
                 element.x_label,
                 getattr(element, "y_label", getattr(element, "label", "")),
+                file_name=getattr(element, "file_name", ""),
             )
 
         return {
@@ -914,6 +968,7 @@ class HyperPlot:
                 {
                     "index": idx,
                     "file_name": getattr(element, "file_name", ""),
+                    "source_path": getattr(element, "source_path", ""),
                     "x_label": getattr(element, "x_label", ""),
                     "label": getattr(element, "label", ""),
                     "ls": getattr(element, "ls", "-"),
@@ -1426,7 +1481,7 @@ class HyperPlot:
             right_lines, right_labels = ax_right.get_legend_handles_labels()
             lines += right_lines
             labels += right_labels
-        if len(elements) > 1:
+        if len(elements) > 1 and parse_bool(self.show_legend):
             legend_frame = parse_bool(self.legend_frame)
             legend = ax.legend(
                 lines,
